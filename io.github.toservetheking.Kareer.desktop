@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Kareer
+GenericName=Job Application Tracker
+Comment=Track your job applications
+Icon=io.github.toservetheking.Kareer
+Exec=kareer
+Terminal=false
+Categories=Qt;KDE;Office;
+Keywords=job;career;applications;tracker;resume;
+StartupWMClass=kareer
