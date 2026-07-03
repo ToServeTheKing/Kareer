@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#63d4c7"/>
+      <stop offset="1" stop-color="#1a7a70"/>
+    </linearGradient>
+  </defs>
+
+  <!-- rounded-square backdrop -->
+  <rect x="8" y="8" width="112" height="112" rx="28" ry="28" fill="url(#bg)"/>
+
+  <!-- briefcase -->
+  <g>
+    <rect x="34" y="58" width="60" height="42" rx="6" fill="#ffffff" fill-opacity="0.92"/>
+    <rect x="52" y="46" width="24" height="14" rx="4" fill="none" stroke="#ffffff" stroke-opacity="0.92" stroke-width="6"/>
+    <rect x="34" y="72" width="60" height="10" fill="#1a7a70" fill-opacity="0.35"/>
+    <rect x="60" y="68" width="8" height="10" rx="2" fill="#1a7a70" fill-opacity="0.55"/>
+  </g>
+
+  <!-- upward trend line, representing progress through the pipeline -->
+  <polyline points="30,44 46,30 58,38 74,22 90,30" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="90,30 98,28 92,36" fill="#ffffff"/>
+</svg>

@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+id: io.github.toservetheking.Kareer
+runtime: org.kde.Platform
+# Use the latest Flathub KDE runtime available at submission time.
+runtime-version: '6.10'
+sdk: org.kde.Sdk
+command: kareer
+
+# A job application tracker: no host filesystem, network, or portal access is
+# needed. Everything it stores lives in the app's own XDG data directory,
+# which Flatpak grants by default.
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - '*.a'
+
+modules:
+  - name: kareer
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+    sources:
+      # For Flathub / release builds, pin to a tag AND commit:
+      - type: git
+        url: https://github.com/toservetheking/Kareer.git
+        tag: v0.1.0
+        # commit: <fill in the exact commit SHA the tag points at>
+      #
+      # For local testing before the repo is pushed, replace the source above with:
+      #   - type: dir
+      #     path: .

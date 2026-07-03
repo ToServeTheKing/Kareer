@@ -1,0 +1,10 @@
+# Build output
+/build/
+/builddir/
+# Flatpak build artifacts
+/.flatpak-builder/
+/repo/
+*.flatpak
+# Editor / misc
+*.user
+*.autosave

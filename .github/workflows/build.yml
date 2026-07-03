@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Build and Publish Flatpak
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # create releases / upload the bundle
+  pages: write      # deploy the hosted Flatpak repo
+  id-token: write   # required by actions/deploy-pages
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Flatpak
+    runs-on: ubuntu-latest
+    container:
+      # Ships the KDE Platform/Sdk + flatpak-builder. Bump the tag to match
+      # runtime-version in the manifest.
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.10
+      options: --privileged
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build from the checked-out commit
+        run: |
+          python3 - <<'PY'
+          import re
+          p = "io.github.toservetheking.Kareer.yml"
+          s = open(p).read()
+          s = re.sub(r"    sources:.*\Z",
+                     "    sources:\n      - type: dir\n        path: .\n",
+                     s, flags=re.S)
+          open(p, "w").write(s)
+          print(s)
+          PY
+
+      - name: Import GPG signing key
+        env:
+          FLATPAK_GPG_PRIVATE_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+        run: |
+          # Keep the keyring OUT of the workspace: the manifest's dir source
+          # copies the checkout, and gpg-agent sockets are "special files".
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -p "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
+          printf '%s\n' "$FLATPAK_GPG_PRIVATE_KEY" | gpg --batch --import
+          FPR=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+          echo "GPG_FPR=$FPR" >> "$GITHUB_ENV"
+
+      - name: Build repo and bundle (signed)
+        run: |
+          flatpak-builder --user --disable-rofiles-fuse --force-clean \
+            --default-branch=stable --repo=repo \
+            --gpg-sign="$GPG_FPR" --gpg-homedir="$GNUPGHOME" \
+            builddir io.github.toservetheking.Kareer.yml
+          flatpak build-update-repo repo --generate-static-deltas \
+            --gpg-sign="$GPG_FPR" --gpg-homedir="$GNUPGHOME"
+          flatpak build-bundle repo \
+            io.github.toservetheking.Kareer.flatpak \
+            io.github.toservetheking.Kareer stable \
+            --gpg-sign="$GPG_FPR" --gpg-homedir="$GNUPGHOME"
+
+      - name: Add repo landing page and .flatpakrepo
+        run: |
+          GPGKEY=$(gpg --homedir "$GNUPGHOME" --export "$GPG_FPR" | base64 -w0)
+          cat > repo/kareer.flatpakrepo <<EOF
+          [Flatpak Repo]
+          Title=Kareer
+          Url=https://toservetheking.github.io/Kareer/
+          Homepage=https://github.com/toservetheking/Kareer
+          Description=Track your job applications
+          GPGKey=$GPGKEY
+          EOF
+          cat > repo/index.html <<'EOF'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>Kareer Flatpak repository</title>
+          <h1>Kareer</h1>
+          <p>Add the repository and install:</p>
+          <pre>flatpak remote-add --if-not-exists --user kareer https://toservetheking.github.io/Kareer/kareer.flatpakrepo
+          flatpak install --user kareer io.github.toservetheking.Kareer</pre>
+          <p>Or download the single-file bundle from the
+          <a href="https://github.com/toservetheking/Kareer/releases">Releases page</a>.</p>
+          EOF
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-bundle
+          path: io.github.toservetheking.Kareer.flatpak
+
+      - name: Attach bundle to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: io.github.toservetheking.Kareer.flatpak
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: repo
+
+  deploy-pages:
+    name: Deploy hosted repo to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: CC0-1.0 -->
+<component type="desktop-application">
+  <id>io.github.toservetheking.Kareer</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>Kareer</name>
+  <summary>Track your job applications</summary>
+
+  <keywords>
+    <keyword>job</keyword>
+    <keyword>career</keyword>
+    <keyword>applications</keyword>
+    <keyword>tracker</keyword>
+    <keyword>resume</keyword>
+    <keyword>sankey</keyword>
+  </keywords>
+
+  <description>
+    <p>
+      Kareer is a Kirigami application for tracking job applications from
+      first contact through to an offer. It records the details that matter -
+      company, title, salary range and expectations, source, and dates - and
+      every stage change is kept as history.
+    </p>
+    <p>
+      A Sankey diagram visualizes the whole pipeline at a glance, showing
+      where applications progress and where they drop off between stages
+      such as Applied, Screening, Interview and Offer.
+    </p>
+    <p>
+      Every action is also available from the command line, so applications
+      can be logged automatically by other tools (for example a resume
+      generator) without opening the GUI.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.toservetheking.Kareer.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/toservetheking/Kareer/main/screenshots/dashboard.png</image>
+      <caption>The application pipeline as a Sankey diagram</caption>
+    </screenshot>
+  </screenshots>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#63d4c7</color>
+    <color type="primary" scheme_preference="dark">#1a7a70</color>
+  </branding>
+
+  <url type="homepage">https://github.com/toservetheking/Kareer</url>
+  <url type="bugtracker">https://github.com/toservetheking/Kareer/issues</url>
+
+  <provides>
+    <binary>kareer</binary>
+  </provides>
+
+  <developer id="io.github.toservetheking">
+    <name>toservetheking</name>
+  </developer>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.1.0" date="2026-07-03">
+      <description>
+        <p>Initial release.</p>
+      </description>
+    </release>
+  </releases>
+</component>
