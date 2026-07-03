@@ -64,6 +64,15 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.1" date="2026-07-03">
+      <description>
+        <ul>
+          <li>Run the test suite in CI on every pull request</li>
+          <li>Add REUSE license-compliance metadata</li>
+          <li>Add a CONTRIBUTING guide</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-07-03">
       <description>
         <p>Initial release.</p>
