@@ -102,7 +102,8 @@ CMake toolchain. On Arch/CachyOS:
 ```sh
 sudo pacman -S --needed cmake extra-cmake-modules base-devel \
     qt6-base qt6-declarative kirigami kirigami-addons \
-    ki18n kcoreaddons kiconthemes kcrash kitemmodels qqc2-desktop-style
+    ki18n kcoreaddons kiconthemes kcrash kitemmodels \
+    kcolorscheme qqc2-desktop-style
 ```
 
 Then:
@@ -128,8 +129,11 @@ Run the tests with `ctest --test-dir build`.
 - `sankeymodel.{h,cpp}` - turns stage history into laid-out Sankey
   geometry (node columns/stacking, ribbon SVG path data); QML only
   draws what this hands back.
+- `jobfieldcatalog.{h,cpp}` - the static catalog of edit-form fields and categories.
+- `jobeditmodel.{h,cpp}` - `QAbstractListModel`-backed edit-form state, built from the field catalog.
 - `clicommands.{h,cpp}` - the `add`/`list`/`show`/`update`/`stage`/
   `delete`/`stats`/`stages` subcommands.
+- `appcolorscheme.{h,cpp}` - QML-facing wrapper around `KColorSchemeManager` for the Preferences page.
 - `qml/` - Kirigami UI: `ApplicationsPage` (list + search),
-  `ApplicationEditDialog` (add/edit/delete form), `DashboardPage`
+  `ApplicationEditPage` (add/edit/delete form), `DashboardPage`
   (stat cards + pipeline), `SankeyDiagram` (the renderer).

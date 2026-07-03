@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 ToServeTheKing <austin@thebennett.net>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Lint
+
+on:
+  pull_request: {}
+  push:
+    branches:
+      - main
+
+jobs:
+  reuse:
+    name: REUSE compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: REUSE Compliance Check
+        uses: fsfe/reuse-action@v3
+
+  clang-format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.10
+      options: --privileged
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure (generates the KDE .clang-format style)
+        run: cmake -B build -G Ninja -DBUILD_TESTING=OFF
+
+      - name: Check formatting
+        run: |
+          find src autotests -name '*.h' -o -name '*.cpp' | \
+            xargs clang-format --dry-run --Werror

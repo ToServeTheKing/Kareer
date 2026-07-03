@@ -1,9 +1,12 @@
+# SPDX-FileCopyrightText: 2026 ToServeTheKing <austin@thebennett.net>
+#
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 add_executable(kareer
     main.cpp
     jobstage.cpp
     jobsdatabase.cpp
+    jobfieldcatalog.cpp
     clicommands.cpp
 )
 
@@ -14,9 +17,10 @@ qt_add_qml_module(kareer
     QML_FILES
         qml/Main.qml
         qml/ApplicationsPage.qml
-        qml/ApplicationEditDialog.qml
+        qml/ApplicationEditPage.qml
         qml/DashboardPage.qml
         qml/SankeyDiagram.qml
+        qml/SettingsPage.qml
     SOURCES
         jobsmodel.cpp
         jobsmodel.h
@@ -24,6 +28,10 @@ qt_add_qml_module(kareer
         statsmodel.h
         sankeymodel.cpp
         sankeymodel.h
+        jobeditmodel.cpp
+        jobeditmodel.h
+        appcolorscheme.cpp
+        appcolorscheme.h
 )
 
 target_include_directories(kareer PRIVATE ${CMAKE_BINARY_DIR})
@@ -41,6 +49,8 @@ target_link_libraries(kareer PRIVATE
     KF6::CoreAddons
     KF6::IconThemes
     KF6::Crash
+    KF6::ColorScheme
+    KF6::Kirigami
 )
 
 install(TARGETS kareer ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})

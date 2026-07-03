@@ -1,4 +1,9 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+/*
+    SPDX-FileCopyrightText: 2026 ToServeTheKing <austin@thebennett.net>
+
+    SPDX-License-Identifier: GPL-3.0-or-later
+*/
+
 #include "kareer-version.h"
 
 #include "clicommands.h"
@@ -20,24 +25,37 @@ using namespace Qt::Literals::StringLiterals;
 
 // Filter out a couple of well-known benign framework artifacts rather than
 // spamming every run. Everything else is passed through untouched.
-static QtMessageHandler s_defaultMessageHandler = nullptr;
-static void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
+static bool isBenignFrameworkNoise(const QString &message)
 {
     // Qt Quick emits this while Kirigami's PageRow incubates pages. It fires even
     // for a trivial empty page, is harmless, and cannot be avoided from app code.
     if (message.contains(QLatin1String("was not placed in the graphics scene"))) {
-        return;
+        return true;
     }
-    // Malformed path data in third-party icon SVGs (system/app icon themes) is not
-    // actionable from here; drop the noise rather than spam every render.
-    if (context.category && qstrcmp(context.category, "qt.svg") == 0) {
-        return;
+    // An internal PageRow/StackView implementation detail, not something app
+    // code can influence.
+    if (message.contains(QLatin1String("StackView has detected conflicting anchors"))) {
+        return true;
     }
     // Qt's Wayland integration tries to self-register with xdg-desktop-portal for
     // optional desktop features (global shortcuts, background). Kareer doesn't use
     // any of those, and it fires harmlessly on hosts where portal app-info
     // resolution is finicky.
     if (message.contains(QLatin1String("Failed to register with host portal"))) {
+        return true;
+    }
+    return false;
+}
+
+static QtMessageHandler s_defaultMessageHandler = nullptr;
+static void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
+{
+    if (isBenignFrameworkNoise(message)) {
+        return;
+    }
+    // Malformed path data in third-party icon SVGs (system/app icon themes) is not
+    // actionable from here; drop the noise rather than spam every render.
+    if (context.category && qstrcmp(context.category, "qt.svg") == 0) {
         return;
     }
     if (s_defaultMessageHandler) {
@@ -86,6 +104,20 @@ int main(int argc, char *argv[])
 
     QQmlApplicationEngine engine;
     KLocalization::setupLocalizedContext(&engine);
+
+    QObject::connect(&engine, &QQmlApplicationEngine::warnings, &engine, [](const QList<QQmlError> &warnings) {
+        for (const QQmlError &error : warnings) {
+            if (isBenignFrameworkNoise(error.description())) {
+                continue;
+            }
+            fprintf(stderr, "QML-WARNING: %s\n", qPrintable(error.toString()));
+        }
+        fflush(stderr);
+    });
+    QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &engine, [](const QUrl &url) {
+        fprintf(stderr, "QML-OBJECT-CREATION-FAILED: %s\n", qPrintable(url.toString()));
+        fflush(stderr);
+    });
 
     engine.loadFromModule("io.github.toservetheking.Kareer", u"Main"_s);
     if (engine.rootObjects().isEmpty()) {
