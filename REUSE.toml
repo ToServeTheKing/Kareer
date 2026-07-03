@@ -1,0 +1,12 @@
+version = 1
+SPDX-PackageName = "Kareer"
+SPDX-PackageSupplier = "ToServeTheKing <austin@thebennett.net>"
+SPDX-PackageDownloadLocation = "https://github.com/toservetheking/Kareer"
+
+[[annotations]]
+path = [
+    "io.github.toservetheking.Kareer.desktop",
+    "keys/*.asc",
+]
+SPDX-License-Identifier = "GPL-3.0-or-later"
+SPDX-FileCopyrightText = "ToServeTheKing <austin@thebennett.net>"

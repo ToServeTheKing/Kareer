@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Build and Test
+
+on:
+  pull_request: {}
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Build and run tests
+    runs-on: ubuntu-latest
+    container:
+      # Ships the KDE Platform/Sdk + flatpak-builder. Bump the tag to match
+      # runtime-version in the manifest.
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.10
+      options: --privileged
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build from the checked-out commit
+        run: |
+          python3 - <<'PY'
+          import re
+          p = "io.github.toservetheking.Kareer.yml"
+          s = open(p).read()
+          s = re.sub(r"    sources:.*\Z",
+                     "    sources:\n      - type: dir\n        path: .\n",
+                     s, flags=re.S)
+          open(p, "w").write(s)
+          print(s)
+          PY
+
+      - name: Build and run tests
+        run: |
+          flatpak-builder --user --disable-rofiles-fuse --force-clean \
+            builddir io.github.toservetheking.Kareer.yml
