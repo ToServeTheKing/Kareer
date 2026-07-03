@@ -1,6 +1,14 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+/*
+    SPDX-FileCopyrightText: 2026 ToServeTheKing <austin@thebennett.net>
+
+    SPDX-License-Identifier: GPL-3.0-or-later
+*/
+
 pragma ComponentBehavior: Bound
 
+// Sidebar/detail two-column layout: a search-filtered list of applications
+// with a RoundedItemDelegate + SubtitleContentItem delegate, where the
+// currently-open entry stays highlighted.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -12,7 +20,9 @@ Kirigami.ScrollablePage {
     id: root
 
     required property JobsModel jobsModel
-    required property var editDialog
+    property int currentJobId: -1
+
+    signal editRequested(int jobId)
 
     title: i18nc("@title", "Applications")
 
@@ -20,14 +30,6 @@ Kirigami.ScrollablePage {
         Layout.fillWidth: true
         onTextChanged: filteredJobs.filterString = text
     }
-
-    actions: [
-        Kirigami.Action {
-            text: i18nc("@action:button", "Add Application")
-            icon.name: "list-add"
-            onTriggered: root.editDialog.openForAdd()
-        }
-    ]
 
     KItemModels.KSortFilterProxyModel {
         id: filteredJobs
@@ -49,32 +51,17 @@ Kirigami.ScrollablePage {
             required property string company
             required property string title
             required property string stage
-            required property var dateApplied
-            required property int salaryMin
-            required property int salaryMax
-            required property string currency
 
             text: jobDelegate.company
+            icon.source: "network-workgroup-symbolic"
+            highlighted: root.currentJobId === jobDelegate.jobId
 
             contentItem: Delegates.SubtitleContentItem {
                 itemDelegate: jobDelegate
-                subtitle: {
-                    const parts = [jobDelegate.title, jobDelegate.stage];
-                    if (jobDelegate.dateApplied) {
-                        parts.push(Qt.formatDate(jobDelegate.dateApplied, "yyyy-MM-dd"));
-                    }
-                    if (jobDelegate.salaryMin >= 0 || jobDelegate.salaryMax >= 0) {
-                        let salary = jobDelegate.currency + " ";
-                        salary += jobDelegate.salaryMin >= 0 ? jobDelegate.salaryMin : "?";
-                        salary += "–";
-                        salary += jobDelegate.salaryMax >= 0 ? jobDelegate.salaryMax : "?";
-                        parts.push(salary);
-                    }
-                    return parts.join(" · ");
-                }
+                subtitle: jobDelegate.title + " · " + jobDelegate.stage
             }
 
-            onClicked: root.editDialog.openForEdit(jobDelegate.jobId)
+            onClicked: root.editRequested(jobDelegate.jobId)
         }
 
         Kirigami.PlaceholderMessage {
@@ -83,7 +70,7 @@ Kirigami.ScrollablePage {
             visible: jobList.count === 0
             icon.name: "office-address-book-symbolic"
             text: i18n("No applications yet")
-            explanation: i18n("Use the Add Application button to log your first one.")
+            explanation: i18n("Use the Add Application button on the dashboard to log your first one.")
         }
     }
 }

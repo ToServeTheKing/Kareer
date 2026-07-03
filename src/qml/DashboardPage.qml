@@ -1,4 +1,9 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+/*
+    SPDX-FileCopyrightText: 2026 ToServeTheKing <austin@thebennett.net>
+
+    SPDX-License-Identifier: GPL-3.0-or-later
+*/
+
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -12,7 +17,17 @@ Kirigami.ScrollablePage {
 
     required property JobsModel jobsModel
 
+    signal addRequested()
+
     title: i18nc("@title", "Dashboard")
+
+    actions: [
+        Kirigami.Action {
+            text: i18nc("@action:button", "Add Application")
+            icon.name: "list-add"
+            onTriggered: root.addRequested()
+        }
+    ]
 
     StatsModel {
         id: statsModel
@@ -57,7 +72,7 @@ Kirigami.ScrollablePage {
                         }
                         QQC2.Label {
                             text: statCard.modelData.label
-                            opacity: 0.7
+                            color: Kirigami.Theme.disabledTextColor
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
