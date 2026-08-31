@@ -32,6 +32,19 @@ bool isValid(const QString &stage)
     return canonicalStages().contains(stage, Qt::CaseInsensitive);
 }
 
+QString canonical(const QString &stage)
+{
+    if (stage.compare(QLatin1String(Start), Qt::CaseInsensitive) == 0) {
+        return QString::fromLatin1(Start);
+    }
+    for (const QString &candidate : canonicalStages()) {
+        if (stage.compare(candidate, Qt::CaseInsensitive) == 0) {
+            return candidate;
+        }
+    }
+    return stage;
+}
+
 int column(const QString &stage)
 {
     static const QHash<QString, int> columns{

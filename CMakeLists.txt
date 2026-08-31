@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(kareer VERSION 0.1.2 LANGUAGES CXX)
+project(kareer VERSION 0.1.3 LANGUAGES CXX)
 
 set(REQUIRED_QT_VERSION 6.6.0)
 set(REQUIRED_KF_VERSION 6.5.0)
@@ -33,6 +33,9 @@ find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS
     Widgets
     Qml
     Quick
+    # QtQuick.Shapes runtime QML module (SankeyDiagram.qml); configure-time
+    # guard only, nothing links against it.
+    QuickShapesPrivate
     QuickControls2
     Sql
     Test

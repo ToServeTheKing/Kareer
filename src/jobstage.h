@@ -25,6 +25,11 @@ QStringList canonicalStages();
 
 bool isValid(const QString &stage);
 
+/// Canonical-case spelling for a stage matched case-insensitively
+/// ("rejected" -> "Rejected", "start" -> Start). Unknown input is returned
+/// unchanged.
+QString canonical(const QString &stage);
+
 /// Sankey column index. Start = 0; Applied..Offer walk the funnel; the three
 /// terminal outcomes (Accepted/Rejected/Withdrawn/Ghosted) share the last
 /// column so a rejection right after Applied is still a valid (longer) link.
