@@ -94,6 +94,14 @@ flatpak install --user ./io.github.toservetheking.Kareer.flatpak
 
 [GitHub Release]: https://github.com/toservetheking/Kareer/releases
 
+On Arch, a `PKGBUILD` is maintained in [`dist/arch`](dist/arch/PKGBUILD)
+(pending AUR publication - the AUR is not accepting new accounts right
+now):
+
+```sh
+cd dist/arch && makepkg -si
+```
+
 ## Building
 
 Requires Qt 6, KDE Frameworks 6, Kirigami, Kirigami Addons and the
