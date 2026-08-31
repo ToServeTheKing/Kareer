@@ -64,6 +64,16 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.3" date="2026-08-31">
+      <description>
+        <ul>
+          <li>Redesign the Sankey pipeline layout: top-aligned funnel, columns spread across the full width, labels always visible</li>
+          <li>Order ribbons at each stage to stop them braiding over each other</li>
+          <li>Canonicalize stage names written via the CLI (e.g. "rejected" now maps to "Rejected") and repair existing databases</li>
+          <li>Debounce window-resize relayouts and stop re-reading the database on resize</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.2" date="2026-07-03">
       <description>
         <ul>

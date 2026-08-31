@@ -132,6 +132,26 @@ bool JobsDatabase::migrate()
         return false;
     }
 
+    // Rows written before stages were canonicalized on write (e.g.
+    // "rejected" via the CLI) would otherwise show up as separate Sankey
+    // nodes with default column/color. lower() is ASCII-only, which is fine:
+    // the stage vocabulary is ASCII.
+    for (const QString &stage : JobStage::canonicalStages()) {
+        for (const QString &statement : {
+                 u"UPDATE jobs SET stage = :s WHERE stage != :s AND lower(stage) = lower(:s)"_s,
+                 u"UPDATE stage_history SET to_stage = :s WHERE to_stage != :s AND lower(to_stage) = lower(:s)"_s,
+                 u"UPDATE stage_history SET from_stage = :s WHERE from_stage != :s AND lower(from_stage) = lower(:s)"_s,
+             }) {
+            QSqlQuery normalize(db);
+            normalize.prepare(statement);
+            normalize.bindValue(u":s"_s, stage);
+            if (!normalize.exec()) {
+                m_lastError = normalize.lastError().text();
+                return false;
+            }
+        }
+    }
+
     return true;
 }
 
@@ -202,6 +222,7 @@ bool JobsDatabase::addJob(Job &job)
         m_lastError = u"Unknown stage '%1'"_s.arg(job.stage);
         return false;
     }
+    job.stage = JobStage::canonical(job.stage);
 
     QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     const QDateTime now = QDateTime::currentDateTimeUtc();
@@ -299,13 +320,14 @@ bool JobsDatabase::setStage(int id, const QString &newStage)
         m_lastError = u"Unknown stage '%1'"_s.arg(newStage);
         return false;
     }
+    const QString stage = JobStage::canonical(newStage);
 
     const auto current = jobById(id);
     if (!current) {
         m_lastError = u"No job with id %1"_s.arg(id);
         return false;
     }
-    if (current->stage.compare(newStage, Qt::CaseInsensitive) == 0) {
+    if (current->stage.compare(stage, Qt::CaseInsensitive) == 0) {
         return true;
     }
 
@@ -314,7 +336,7 @@ bool JobsDatabase::setStage(int id, const QString &newStage)
 
     QSqlQuery query(db);
     query.prepare(u"UPDATE jobs SET stage = :stage, updated_at = :updated_at WHERE id = :id"_s);
-    query.bindValue(u":stage"_s, newStage);
+    query.bindValue(u":stage"_s, stage);
     query.bindValue(u":updated_at"_s, now.toString(Qt::ISODate));
     query.bindValue(u":id"_s, id);
     if (!query.exec()) {
@@ -326,7 +348,7 @@ bool JobsDatabase::setStage(int id, const QString &newStage)
     history.prepare(u"INSERT INTO stage_history (job_id, from_stage, to_stage, changed_at) VALUES (:job_id, :from_stage, :to_stage, :changed_at)"_s);
     history.bindValue(u":job_id"_s, id);
     history.bindValue(u":from_stage"_s, current->stage);
-    history.bindValue(u":to_stage"_s, newStage);
+    history.bindValue(u":to_stage"_s, stage);
     history.bindValue(u":changed_at"_s, now.toString(Qt::ISODate));
     if (!history.exec()) {
         m_lastError = history.lastError().text();

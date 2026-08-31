@@ -8,7 +8,9 @@
 
 #include "jobsdatabase.h"
 
+#include <QHash>
 #include <QObject>
+#include <QPair>
 #include <QQmlEngine>
 #include <QVariantList>
 
@@ -39,15 +41,20 @@ public:
     bool isEmpty() const;
 
 public Q_SLOTS:
-    /// Recomputes node/link geometry to fit within (width, height) logical
-    /// pixels. Call whenever the data or the available viewport changes.
-    void relayout(qreal width, qreal height);
+    /// Re-reads the stage history from the database, then lays it out to fit
+    /// within (width, height) logical pixels. Call whenever the data changes.
+    void reload(qreal width, qreal height, qreal nodeWidth = 16.0, qreal padding = 10.0);
+
+    /// Recomputes node/link geometry from the cached stage history. Call on
+    /// viewport resizes; unlike reload() this never touches the database.
+    void relayout(qreal width, qreal height, qreal nodeWidth = 16.0, qreal padding = 10.0);
 
 Q_SIGNALS:
     void changed();
 
 private:
     JobsDatabase m_db;
+    QHash<QPair<QString, QString>, int> m_counts;
     QVariantList m_nodes;
     QVariantList m_links;
 };
