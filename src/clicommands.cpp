@@ -443,7 +443,7 @@ int runStage(const QString &program, const QStringList &args)
     if (parser.isSet(u"json"_s)) {
         printJson(jobToJson(*job));
     } else {
-        QTextStream(stdout) << u"Application #%1 moved to %2"_s.arg(id).arg(stage) << Qt::endl;
+        QTextStream(stdout) << u"Application #%1 moved to %2"_s.arg(id).arg(job->stage) << Qt::endl;
     }
     return 0;
 }

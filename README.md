@@ -100,8 +100,8 @@ Requires Qt 6, KDE Frameworks 6, Kirigami, Kirigami Addons and the
 CMake toolchain. On Arch/CachyOS:
 
 ```sh
-sudo pacman -S --needed cmake extra-cmake-modules base-devel \
-    qt6-base qt6-declarative kirigami kirigami-addons \
+sudo pacman -S --needed cmake ninja extra-cmake-modules base-devel \
+    qt6-base qt6-declarative vulkan-headers kirigami kirigami-addons \
     ki18n kcoreaddons kiconthemes kcrash kitemmodels \
     kcolorscheme qqc2-desktop-style
 ```
@@ -109,10 +109,13 @@ sudo pacman -S --needed cmake extra-cmake-modules base-devel \
 Then:
 
 ```sh
-cmake -B build -G Ninja
+cmake -B build
 cmake --build build
 ./build/bin/kareer
 ```
+
+(If you have `ninja` installed, add `-G Ninja` to the configure step or
+use the `ninja-dev` preset: `cmake --preset ninja-dev`.)
 
 Run the tests with `ctest --test-dir build`.
 
@@ -136,4 +139,5 @@ Run the tests with `ctest --test-dir build`.
 - `appcolorscheme.{h,cpp}` - QML-facing wrapper around `KColorSchemeManager` for the Preferences page.
 - `qml/` - Kirigami UI: `ApplicationsPage` (list + search),
   `ApplicationEditPage` (add/edit/delete form), `DashboardPage`
-  (stat cards + pipeline), `SankeyDiagram` (the renderer).
+  (stat cards + pipeline), `SankeyDiagram` (the renderer),
+  `SettingsPage` (the Preferences page).
