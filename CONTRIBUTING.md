@@ -30,10 +30,12 @@ release builds.
 
 ## Conventions
 
+<!-- REUSE-IgnoreStart -->
 - Every source file starts with `SPDX-License-Identifier: GPL-3.0-or-later`
   (in whatever comment syntax fits the file type). Files that can't carry
   an inline header — `.desktop`, `keys/*.asc` — are covered instead by
   `REUSE.toml`.
+<!-- REUSE-IgnoreEnd -->
 - `src/` is intentionally flat: one class per concern, no `models/`,
   `controllers/`, or `viewmodels/` subfolders.
 - C++ backend classes are exposed to QML via `QML_ELEMENT`; QML views are

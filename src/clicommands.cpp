@@ -553,17 +553,10 @@ int runStages(const QString &program, const QStringList &args)
 int runHelp()
 {
     QTextStream out(stdout);
-    out << u"Usage: kareer <command> [options]\n\n"_s
-        << u"Commands:\n"_s
-        << u"  add      Add a new job application\n"_s
-        << u"  list     List job applications\n"_s
-        << u"  show     Show one job application\n"_s
-        << u"  update   Update fields on an existing application\n"_s
-        << u"  stage    Move an application to a new stage\n"_s
-        << u"  delete   Delete an application\n"_s
-        << u"  stats    Summary statistics\n"_s
-        << u"  stages   List the canonical pipeline stages\n\n"_s
-        << u"Run 'kareer <command> --help' for the options of a specific command.\n"_s
+    out << u"Usage: kareer <command> [options]\n\n"_s << u"Commands:\n"_s << u"  add      Add a new job application\n"_s
+        << u"  list     List job applications\n"_s << u"  show     Show one job application\n"_s << u"  update   Update fields on an existing application\n"_s
+        << u"  stage    Move an application to a new stage\n"_s << u"  delete   Delete an application\n"_s << u"  stats    Summary statistics\n"_s
+        << u"  stages   List the canonical pipeline stages\n\n"_s << u"Run 'kareer <command> --help' for the options of a specific command.\n"_s
         << u"Running kareer with no command (or an unrecognized one) starts the GUI.\n"_s;
     return 0;
 }
@@ -573,7 +566,15 @@ int runHelp()
 bool Cli::isSubcommand(const QString &arg)
 {
     static const QSet<QString> subcommands{
-        u"add"_s, u"list"_s, u"show"_s, u"update"_s, u"stage"_s, u"delete"_s, u"stats"_s, u"stages"_s, u"help"_s,
+        u"add"_s,
+        u"list"_s,
+        u"show"_s,
+        u"update"_s,
+        u"stage"_s,
+        u"delete"_s,
+        u"stats"_s,
+        u"stages"_s,
+        u"help"_s,
     };
     return subcommands.contains(arg);
 }

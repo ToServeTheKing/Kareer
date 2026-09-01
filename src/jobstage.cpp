@@ -104,8 +104,7 @@ QColor color(const QString &stage)
 
 bool isTerminal(const QString &stage)
 {
-    return stage == QLatin1String("Accepted") || stage == QLatin1String("Rejected") || stage == QLatin1String("Withdrawn")
-        || stage == QLatin1String("Ghosted");
+    return stage == QLatin1String("Accepted") || stage == QLatin1String("Rejected") || stage == QLatin1String("Withdrawn") || stage == QLatin1String("Ghosted");
 }
 
 }
