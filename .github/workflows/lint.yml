@@ -16,8 +16,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      # v3 ships reuse 3.x, which predates REUSE.toml support and flags
+      # every file the annotations cover; v5 (reuse 5.x) understands it.
       - name: REUSE Compliance Check
-        uses: fsfe/reuse-action@v3
+        uses: fsfe/reuse-action@v5
 
   clang-format:
     name: clang-format
