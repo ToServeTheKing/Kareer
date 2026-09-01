@@ -230,7 +230,8 @@ bool JobsDatabase::addJob(Job &job)
     job.updatedAt = now;
 
     QSqlQuery query(db);
-    query.prepare(uR"(
+    query.prepare(
+        uR"(
         INSERT INTO jobs (company, title, location, remote_type, source, url, date_applied,
                            salary_min, salary_max, salary_expectation, currency, notes, contact,
                            stage, created_at, updated_at)
@@ -278,7 +279,8 @@ bool JobsDatabase::updateJob(const Job &job)
 {
     QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     QSqlQuery query(db);
-    query.prepare(uR"(
+    query.prepare(
+        uR"(
         UPDATE jobs SET company = :company, title = :title, location = :location,
                         remote_type = :remote_type, source = :source, url = :url,
                         date_applied = :date_applied, salary_min = :salary_min,

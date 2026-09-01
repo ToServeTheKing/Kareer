@@ -4,8 +4,8 @@
     SPDX-License-Identifier: GPL-3.0-or-later
 */
 
-#include "job.h"
 #include "jobsdatabase.h"
+#include "job.h"
 
 #include <QTemporaryDir>
 #include <QtTest>

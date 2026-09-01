@@ -22,15 +22,16 @@ jobs:
   clang-format:
     name: clang-format
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.10
-      options: --privileged
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure (generates the KDE .clang-format style)
-        run: cmake -B build -G Ninja -DBUILD_TESTING=OFF
+      # The .clang-format at the repo root is the one ECM's KDEClangFormat
+      # generates at configure time, committed so this check needs no KDE
+      # stack. Pinned to the clang-format major used to format the tree -
+      # output drifts between major versions.
+      - name: Install clang-format
+        run: pipx install clang-format==22.1.8
 
       - name: Check formatting
         run: |

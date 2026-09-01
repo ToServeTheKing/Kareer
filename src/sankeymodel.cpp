@@ -344,8 +344,8 @@ void SankeyModel::relayout(qreal width, qreal height, qreal nodeWidth, qreal pad
         const qreal x1 = toNode.x;
         const qreal midX = (x0 + x1) / 2.0;
 
-        const QString path = u"M"_s + point(x0, y0Top) + u" C"_s + point(midX, y0Top) + u" "_s + point(midX, y1Top) + u" "_s + point(x1, y1Top)
-            + u" L"_s + point(x1, y1Bottom) + u" C"_s + point(midX, y1Bottom) + u" "_s + point(midX, y0Bottom) + u" "_s + point(x0, y0Bottom) + u" Z"_s;
+        const QString path = u"M"_s + point(x0, y0Top) + u" C"_s + point(midX, y0Top) + u" "_s + point(midX, y1Top) + u" "_s + point(x1, y1Top) + u" L"_s
+            + point(x1, y1Bottom) + u" C"_s + point(midX, y1Bottom) + u" "_s + point(midX, y0Bottom) + u" "_s + point(x0, y0Bottom) + u" Z"_s;
 
         QColor linkColor = JobStage::color(from);
         linkColor.setAlphaF(0.5f);

@@ -6,9 +6,9 @@
 
 #pragma once
 
+#include <QList>
 #include <QString>
 #include <QStringList>
-#include <QList>
 
 /**
  * The static structure of the job edit form: which categories exist, and
