@@ -39,3 +39,25 @@ target_link_libraries(sankeylayouttest PRIVATE
 )
 
 add_test(NAME sankeylayouttest COMMAND sankeylayouttest)
+
+add_executable(jobeditmodeltest
+    jobeditmodeltest.cpp
+    ../src/jobstage.cpp
+    ../src/jobsdatabase.cpp
+    ../src/jobsmodel.cpp
+    ../src/jobeditmodel.cpp
+    ../src/jobfieldcatalog.cpp
+)
+
+target_include_directories(jobeditmodeltest PRIVATE ../src)
+
+target_link_libraries(jobeditmodeltest PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Qml
+    Qt6::Sql
+    Qt6::Test
+    KF6::I18n
+)
+
+add_test(NAME jobeditmodeltest COMMAND jobeditmodeltest)

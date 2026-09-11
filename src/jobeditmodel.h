@@ -74,10 +74,12 @@ Q_SIGNALS:
 
 private:
     void resetValues();
+    void setLastError(const QString &error);
 
     JobsModel *m_jobsModel = nullptr;
     int m_editingJobId = -1;
     QHash<QString, QVariant> m_values;
     QString m_lastError;
+    QString m_loadedStage; ///< Stage as loaded from the database, to detect stage changes on save.
     QList<JobFieldCatalog::Field> m_fields;
 };

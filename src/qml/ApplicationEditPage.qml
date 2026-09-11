@@ -56,11 +56,10 @@ Kirigami.ScrollablePage {
         Kirigami.Action {
             text: i18nc("@action:button", "Save")
             icon.name: "document-save"
+            // On failure, editModel.lastError is set and shown by errorLabel.
             onTriggered: {
                 if (editModel.save()) {
                     root.done();
-                } else {
-                    errorLabel.text = editModel.lastError;
                 }
             }
         }
@@ -76,6 +75,7 @@ Kirigami.ScrollablePage {
             Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.bottomMargin: Kirigami.Units.smallSpacing
             type: Kirigami.MessageType.Error
+            text: editModel.lastError
             visible: text.length > 0
         }
 
@@ -204,11 +204,11 @@ Kirigami.ScrollablePage {
                                         from: spinD.model.spinMin
                                         to: spinD.model.spinMax
                                         stepSize: 1000
-                                        // One-time init, not a persistent binding: this also
-                                        // writes back on user edits, so binding "value" live to
-                                        // spinD.model.value would be a binding loop.
-                                        Component.onCompleted: value = spinD.model.value
-                                        onValueChanged: editModel.setValue(spinD.sourceRow, value)
+                                        // Live binding so values loaded after the delegate is
+                                        // created still show up. Writing back only on
+                                        // valueModified (user edits) avoids a binding loop.
+                                        value: spinD.model.value
+                                        onValueModified: editModel.setValue(spinD.sourceRow, value)
                                     }
 
                                     Kirigami.Separator {
@@ -279,7 +279,13 @@ Kirigami.ScrollablePage {
                                         Layout.preferredHeight: Kirigami.Units.gridUnit * 5
                                         wrapMode: TextEdit.Wrap
                                         text: areaD.value
-                                        onTextChanged: editModel.setValue(areaD.sourceRow, text)
+                                        // TextArea has no textEdited signal; skip the echo from
+                                        // the model-driven binding and only write real edits.
+                                        onTextChanged: {
+                                            if (text !== areaD.value) {
+                                                editModel.setValue(areaD.sourceRow, text);
+                                            }
+                                        }
                                     }
 
                                     Kirigami.Separator {
