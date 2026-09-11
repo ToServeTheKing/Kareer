@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(kareer VERSION 0.1.5 LANGUAGES CXX)
+project(kareer VERSION 0.1.6 LANGUAGES CXX)
 
 set(REQUIRED_QT_VERSION 6.6.0)
 set(REQUIRED_KF_VERSION 6.5.0)

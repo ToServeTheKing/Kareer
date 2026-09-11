@@ -65,6 +65,14 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.6" date="2026-09-11">
+      <description>
+        <p>Ships everything listed for 0.1.5, which was never published because its build failed.</p>
+        <ul>
+          <li>Fix the new app icon not being recognised by software centers, which stopped the Flatpak from building</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.5" date="2026-09-11">
       <description>
         <ul>
