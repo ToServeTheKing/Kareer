@@ -6,6 +6,8 @@
 
 #include "jobeditmodel.h"
 
+#include <KLocalizedString>
+
 #include <QDate>
 
 using namespace Qt::Literals::StringLiterals;
@@ -96,6 +98,10 @@ void JobEditModel::setJobsModel(JobsModel *model)
         return;
     }
     m_jobsModel = model;
+    // QML does not guarantee editingJobId is assigned after jobsModel; if it
+    // came first, the resetValues() it triggered had no model to load from
+    // and only filled new-job defaults.
+    resetValues();
     Q_EMIT jobsModelChanged();
 }
 
@@ -117,6 +123,7 @@ void JobEditModel::setEditingJobId(int id)
 void JobEditModel::resetValues()
 {
     m_values.clear();
+    m_loadedStage.clear();
 
     if (m_editingJobId < 0 || !m_jobsModel) {
         m_values[u"currency"_s] = u"USD"_s;
@@ -138,6 +145,7 @@ void JobEditModel::resetValues()
             }
             m_values[field.id] = value;
         }
+        m_loadedStage = m_values.value(u"stage"_s).toString();
     }
 
     if (rowCount() > 0) {
@@ -170,7 +178,19 @@ void JobEditModel::setValue(int row, const QVariant &value)
 
 bool JobEditModel::save()
 {
+    setLastError(QString());
+
     if (!m_jobsModel) {
+        setLastError(i18n("Cannot save: no applications list is attached to this form."));
+        return false;
+    }
+
+    if (m_values.value(u"company"_s).toString().trimmed().isEmpty()) {
+        setLastError(i18n("Company is required."));
+        return false;
+    }
+    if (m_values.value(u"title"_s).toString().trimmed().isEmpty()) {
+        setLastError(i18n("Job title is required."));
         return false;
     }
 
@@ -187,12 +207,39 @@ bool JobEditModel::save()
         }
     }
 
-    const bool ok = m_editingJobId < 0 ? m_jobsModel->addJob(fields) : m_jobsModel->updateJob(m_editingJobId, fields);
-    if (!ok) {
-        m_lastError = m_jobsModel->lastError();
-        Q_EMIT lastErrorChanged();
+    if (m_editingJobId < 0) {
+        if (!m_jobsModel->addJob(fields)) {
+            setLastError(m_jobsModel->lastError());
+            return false;
+        }
+        return true;
     }
-    return ok;
+
+    if (!m_jobsModel->updateJob(m_editingJobId, fields)) {
+        setLastError(m_jobsModel->lastError());
+        return false;
+    }
+
+    // updateJob() deliberately never writes the stage (so every stage change
+    // lands in stage_history); route a changed stage through setStage().
+    const QString stage = fields.value(u"stage"_s).toString();
+    if (!stage.isEmpty() && stage != m_loadedStage) {
+        if (!m_jobsModel->setStage(m_editingJobId, stage)) {
+            setLastError(m_jobsModel->lastError());
+            return false;
+        }
+        m_loadedStage = stage;
+    }
+    return true;
+}
+
+void JobEditModel::setLastError(const QString &error)
+{
+    if (m_lastError == error) {
+        return;
+    }
+    m_lastError = error;
+    Q_EMIT lastErrorChanged();
 }
 
 bool JobEditModel::deleteJob()
