@@ -39,5 +39,5 @@ modules:
       # For Flathub / release builds, pin to a tag AND commit instead:
       #   - type: git
       #     url: https://github.com/toservetheking/Kareer.git
-      #     tag: v0.1.5
+      #     tag: v0.1.6
       #     commit: <fill in the exact commit SHA the tag points at>
