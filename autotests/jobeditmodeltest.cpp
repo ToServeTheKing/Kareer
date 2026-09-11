@@ -43,6 +43,12 @@ private Q_SLOTS:
         QCOMPARE(valueOf(edit, u"company"_s).toString(), u"Acme Corp"_s);
         QCOMPARE(valueOf(edit, u"title"_s).toString(), u"Engineer"_s);
         QCOMPARE(valueOf(edit, u"salaryMin"_s).toInt(), 100000);
+
+        // The history's first step shows the date applied, not when it was logged.
+        StageHistoryModel *history = edit.history();
+        QCOMPARE(history->rowCount(), 1);
+        QCOMPARE(history->data(history->index(0), StageHistoryModel::StageRole).toString(), u"Applied"_s);
+        QCOMPARE(history->data(history->index(0), StageHistoryModel::DateRole).toDate(), QDate(2026, 6, 1));
     }
 
     void savesEditsToExistingJob()
@@ -79,15 +85,53 @@ private Q_SLOTS:
         edit.setEditingJobId(id);
         edit.setJobsModel(&jobs);
 
-        setValueOf(edit, u"stage"_s, u"Interview"_s);
+        // Moving the application on is adding a step to its history.
+        StageHistoryModel *history = edit.history();
+        history->appendStep();
+        history->setStage(history->rowCount() - 1, u"Interview"_s);
         QVERIFY2(edit.save(), qPrintable(edit.lastError()));
 
         JobsDatabase db;
         QCOMPARE(db.jobById(id)->stage, u"Interview"_s);
+        QCOMPARE(db.jobById(id)->dateApplied, QDate(2026, 6, 1));
         const auto transitions = db.stageTransitions();
         QCOMPARE(transitions.size(), 2);
         QCOMPARE(transitions.last().fromStage, u"Applied"_s);
         QCOMPARE(transitions.last().toStage, u"Interview"_s);
+    }
+
+    // Applied, interviewed, then rejected: logged in one go after the fact.
+    void logsApplicationAfterTheFact()
+    {
+        JobsModel jobs;
+        JobEditModel edit;
+        edit.setJobsModel(&jobs);
+        setValueOf(edit, u"company"_s, u"Allstate"_s);
+        setValueOf(edit, u"title"_s, u"Software Engineer"_s);
+
+        StageHistoryModel *history = edit.history();
+        const auto day = [](int month, int dayOfMonth) {
+            return QDateTime(QDate(2026, month, dayOfMonth), QTime(9, 0));
+        };
+        history->setDate(0, day(8, 1));
+        history->appendStep();
+        history->setStage(1, u"Interview"_s);
+        history->setDate(1, day(8, 15));
+        history->appendStep();
+        history->setStage(2, u"Rejected"_s);
+        history->setDate(2, day(8, 20));
+        QVERIFY2(edit.save(), qPrintable(edit.lastError()));
+
+        JobsDatabase db;
+        const QList<Job> all = db.allJobs();
+        QCOMPARE(all.size(), 1);
+        QCOMPARE(all.first().stage, u"Rejected"_s);
+        QCOMPARE(all.first().dateApplied, QDate(2026, 8, 1));
+        const QList<StageStep> steps = db.stageHistory(all.first().id);
+        QCOMPARE(steps.size(), 3);
+        QCOMPARE(steps.at(1).stage, u"Interview"_s);
+        QCOMPARE(steps.at(1).at.toLocalTime().date(), QDate(2026, 8, 15));
+        QCOMPARE(steps.at(2).at.toLocalTime().date(), QDate(2026, 8, 20));
     }
 
     void addsNewJob()
@@ -106,6 +150,27 @@ private Q_SLOTS:
         QCOMPARE(all.size(), 1);
         QCOMPARE(all.first().company, u"Globex"_s);
         QCOMPARE(all.first().stage, u"Applied"_s);
+    }
+
+    // A new form's text fields must start empty; a missing value showed up
+    // in QML as the word "undefined".
+    void newFormFieldsStartEmpty()
+    {
+        JobsModel jobs;
+        JobEditModel edit;
+        edit.setJobsModel(&jobs);
+        for (int row = 0; row < edit.rowCount(); ++row) {
+            const QVariant value = edit.data(edit.index(row), JobEditModel::ValueRole);
+            const QString id = edit.data(edit.index(row), JobEditModel::FieldIdRole).toString();
+            QVERIFY2(value.isValid(), qPrintable(id));
+        }
+        for (const QString &id : {u"company"_s, u"title"_s, u"location"_s, u"source"_s, u"url"_s, u"contact"_s, u"notes"_s}) {
+            const QVariant value = valueOf(edit, id);
+            QCOMPARE(value.typeId(), QMetaType::QString);
+            QVERIFY2(value.toString().isEmpty(), qPrintable(id));
+        }
+        QCOMPARE(valueOf(edit, u"currency"_s).toString(), u"USD"_s);
+        QCOMPARE(valueOf(edit, u"remoteType"_s).toString(), u"Unspecified"_s);
     }
 
     void missingCompanyIsReported()

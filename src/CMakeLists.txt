@@ -31,10 +31,22 @@ qt_add_qml_module(kareer
         sankeymodel.h
         jobeditmodel.cpp
         jobeditmodel.h
+        stagehistorymodel.cpp
+        stagehistorymodel.h
         appcolorscheme.cpp
         appcolorscheme.h
         databaselocation.cpp
         databaselocation.h
+        autoghost.cpp
+        autoghost.h
+)
+
+# The app icon, embedded so the window and About page show it even when
+# running from the build directory; the installed hicolor icon wins when present.
+qt_add_resources(kareer "appicon"
+    PREFIX "/icons"
+    BASE "${CMAKE_SOURCE_DIR}/icons"
+    FILES "${CMAKE_SOURCE_DIR}/icons/sc-apps-io.github.toservetheking.Kareer.svg"
 )
 
 target_include_directories(kareer PRIVATE ${CMAKE_BINARY_DIR})

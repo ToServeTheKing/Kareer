@@ -31,6 +31,12 @@ struct Job {
     QDateTime updatedAt;
 };
 
+/// One step in an application's history: the stage it moved to, and when.
+struct StageStep {
+    QString stage;
+    QDateTime at;
+};
+
 /// One recorded move from one stage to another (or from "Start" for the
 /// initial application), used to build the Sankey diagram.
 struct StageTransition {

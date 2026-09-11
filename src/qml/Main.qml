@@ -31,9 +31,26 @@ Kirigami.ApplicationWindow {
     Connections {
         target: DatabaseLocation
         function onChanged(): void {
+            AutoGhost.run();
             jobsModel.refresh();
             root.showDashboard();
         }
+    }
+
+    // Applications with no response moved to Ghosted (at startup, after a
+    // database switch, or after the Preferences setting changed).
+    Connections {
+        target: AutoGhost
+        function onRan(count: int): void {
+            if (count > 0) {
+                jobsModel.refresh();
+                root.announceGhosted(count);
+            }
+        }
+    }
+
+    function announceGhosted(count: int): void {
+        root.showPassiveNotification(i18ncp("@info", "Marked %1 application with no response as Ghosted", "Marked %1 applications with no response as Ghosted", count));
     }
 
     DatabaseSetupDialog {
@@ -43,6 +60,8 @@ Kirigami.ApplicationWindow {
     Component.onCompleted: {
         if (DatabaseLocation.setupPending) {
             setupDialog.open();
+        } else if (AutoGhost.lastRunCount > 0) {
+            root.announceGhosted(AutoGhost.lastRunCount);
         }
     }
 

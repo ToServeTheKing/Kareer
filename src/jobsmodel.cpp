@@ -167,14 +167,14 @@ QVariantMap JobsModel::jobData(int id) const
     return mapFromJob(*job);
 }
 
-bool JobsModel::addJob(const QVariantMap &fields)
+int JobsModel::addJob(const QVariantMap &fields)
 {
     Job job = jobFromMap(fields);
-    const bool ok = m_db.addJob(job);
-    if (ok) {
-        refresh();
+    if (!m_db.addJob(job)) {
+        return -1;
     }
-    return ok;
+    refresh();
+    return job.id;
 }
 
 bool JobsModel::updateJob(int id, const QVariantMap &fields)
@@ -200,6 +200,20 @@ bool JobsModel::setStage(int id, const QString &stage)
 bool JobsModel::removeJob(int id)
 {
     const bool ok = m_db.deleteJob(id);
+    if (ok) {
+        refresh();
+    }
+    return ok;
+}
+
+QList<StageStep> JobsModel::stageHistory(int id) const
+{
+    return m_db.stageHistory(id);
+}
+
+bool JobsModel::replaceStageHistory(int id, const QList<StageStep> &steps)
+{
+    const bool ok = m_db.replaceStageHistory(id, steps);
     if (ok) {
         refresh();
     }
