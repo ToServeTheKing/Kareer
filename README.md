@@ -58,9 +58,23 @@ kareer stages
 ```
 
 Run `kareer <command> --help` for the full option list of any
-subcommand. Data lives in `$XDG_DATA_HOME/kareer/kareer.sqlite`
-(under Flatpak, that's sandboxed to the app's own data directory); set
-`KAREER_DB_PATH` to point at a different file.
+subcommand.
+
+### Where the data lives
+
+On first launch the GUI asks where to keep the database: the default
+location, a folder you choose (a synced folder, say), or an existing
+`kareer.sqlite` you already have, used where it is. You can move or switch
+it later under Preferences. The CLI uses the same file.
+
+The database file is picked in this order:
+
+1. `--db <path>` on the command line (GUI or any subcommand; the file is
+   created if it doesn't exist): `kareer --db ~/test.sqlite list`
+2. The `KAREER_DB_PATH` environment variable
+3. The location chosen in the GUI (stored in `kareerrc`)
+4. `$XDG_DATA_HOME/kareer/kareer.sqlite` (under Flatpak, that's sandboxed to
+   the app's own data directory)
 
 ### Wiring up a resume-builder tool
 
@@ -110,8 +124,21 @@ CMake toolchain. On Arch/CachyOS:
 ```sh
 sudo pacman -S --needed cmake ninja extra-cmake-modules base-devel \
     qt6-base qt6-declarative vulkan-headers kirigami kirigami-addons \
-    ki18n kcoreaddons kiconthemes kcrash kitemmodels \
+    ki18n kconfig kcoreaddons kiconthemes kcrash kitemmodels \
     kcolorscheme qqc2-desktop-style
+```
+
+On Fedora 44:
+
+```sh
+sudo dnf install cmake ninja-build extra-cmake-modules gcc-c++ \
+    qt6-qtbase-devel qt6-qtbase-private-devel \
+    qt6-qtdeclarative-devel qt6-qtquickcontrols2-devel \
+    vulkan-headers kf6-kirigami-devel \
+    kf6-kirigami-addons-devel kf6-ki18n-devel kf6-kcoreaddons-devel \
+    kf6-kconfig-devel \
+    kf6-kiconthemes-devel kf6-kcrash-devel kf6-kitemmodels-devel \
+    kf6-kcolorscheme-devel qqc2-desktop-style
 ```
 
 Then:

@@ -17,6 +17,7 @@ StatsModel::StatsModel(QObject *parent)
 
 void StatsModel::refresh()
 {
+    m_db.reopenIfPathChanged();
     m_jobs = m_db.allJobs();
     Q_EMIT changed();
 }

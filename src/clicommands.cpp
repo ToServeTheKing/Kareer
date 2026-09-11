@@ -26,6 +26,13 @@ using namespace Qt::Literals::StringLiterals;
 namespace
 {
 
+/// --db is applied and stripped in main() before any parser runs; declaring
+/// it here only documents it in each subcommand's --help.
+void addDbOption(QCommandLineParser &parser)
+{
+    parser.addOption({u"db"_s, u"Use this database file instead of the configured one"_s, u"path"_s});
+}
+
 QJsonValue optionalInt(int value)
 {
     return value < 0 ? QJsonValue() : QJsonValue(value);
@@ -159,6 +166,7 @@ int runAdd(const QString &program, const QStringList &args)
     QCommandLineParser parser;
     parser.setApplicationDescription(u"Add a new job application"_s);
     parser.addHelpOption();
+    addDbOption(parser);
     addCommonJobOptions(parser);
     parser.process(QStringList{program} + args);
 
@@ -225,6 +233,7 @@ int runList(const QString &program, const QStringList &args)
     QCommandLineParser parser;
     parser.setApplicationDescription(u"List job applications"_s);
     parser.addHelpOption();
+    addDbOption(parser);
     parser.addOption({u"stage"_s, u"Filter by stage"_s, u"stage"_s});
     parser.addOption({u"company"_s, u"Filter by company (substring match)"_s, u"text"_s});
     parser.addOption({u"json"_s, u"Print machine-readable JSON"_s});
@@ -272,6 +281,7 @@ int runShow(const QString &program, const QStringList &args)
     QCommandLineParser parser;
     parser.setApplicationDescription(u"Show one job application"_s);
     parser.addHelpOption();
+    addDbOption(parser);
     parser.addOption({u"json"_s, u"Print machine-readable JSON"_s});
     parser.addPositionalArgument(u"id"_s, u"Application id"_s);
     parser.process(QStringList{program} + args);
@@ -310,6 +320,7 @@ int runUpdate(const QString &program, const QStringList &args)
     QCommandLineParser parser;
     parser.setApplicationDescription(u"Update fields on an existing application"_s);
     parser.addHelpOption();
+    addDbOption(parser);
     addCommonJobOptions(parser);
     parser.addPositionalArgument(u"id"_s, u"Application id"_s);
     parser.process(QStringList{program} + args);
@@ -410,6 +421,7 @@ int runStage(const QString &program, const QStringList &args)
     QCommandLineParser parser;
     parser.setApplicationDescription(u"Move an application to a new stage"_s);
     parser.addHelpOption();
+    addDbOption(parser);
     parser.addOption({u"json"_s, u"Print machine-readable JSON"_s});
     parser.addPositionalArgument(u"id"_s, u"Application id"_s);
     parser.addPositionalArgument(u"stage"_s, u"New stage: %1"_s.arg(JobStage::canonicalStages().join(u", "_s)));
@@ -453,6 +465,7 @@ int runDelete(const QString &program, const QStringList &args)
     QCommandLineParser parser;
     parser.setApplicationDescription(u"Delete an application"_s);
     parser.addHelpOption();
+    addDbOption(parser);
     parser.addOption({u"yes"_s, u"Confirm deletion"_s});
     parser.addPositionalArgument(u"id"_s, u"Application id"_s);
     parser.process(QStringList{program} + args);
@@ -490,6 +503,7 @@ int runStats(const QString &program, const QStringList &args)
     QCommandLineParser parser;
     parser.setApplicationDescription(u"Summary statistics across all applications"_s);
     parser.addHelpOption();
+    addDbOption(parser);
     parser.addOption({u"json"_s, u"Print machine-readable JSON"_s});
     parser.process(QStringList{program} + args);
 
@@ -531,6 +545,7 @@ int runStages(const QString &program, const QStringList &args)
     QCommandLineParser parser;
     parser.setApplicationDescription(u"List the canonical pipeline stages"_s);
     parser.addHelpOption();
+    addDbOption(parser);
     parser.addOption({u"json"_s, u"Print machine-readable JSON"_s});
     parser.process(QStringList{program} + args);
 
@@ -557,7 +572,8 @@ int runHelp()
         << u"  list     List job applications\n"_s << u"  show     Show one job application\n"_s << u"  update   Update fields on an existing application\n"_s
         << u"  stage    Move an application to a new stage\n"_s << u"  delete   Delete an application\n"_s << u"  stats    Summary statistics\n"_s
         << u"  stages   List the canonical pipeline stages\n\n"_s << u"Run 'kareer <command> --help' for the options of a specific command.\n"_s
-        << u"Running kareer with no command (or an unrecognized one) starts the GUI.\n"_s;
+        << u"Running kareer with no command (or an unrecognized one) starts the GUI.\n\n"_s << u"Global options:\n"_s
+        << u"  --db <path>  Use this database file (created if missing) instead of the configured one\n"_s;
     return 0;
 }
 

@@ -31,9 +31,41 @@ public:
     JobsDatabase(const JobsDatabase &) = delete;
     JobsDatabase &operator=(const JobsDatabase &) = delete;
 
-    /// Default location: $XDG_DATA_HOME/kareer/kareer.sqlite, overridable
-    /// with the KAREER_DB_PATH environment variable (used by autotests).
+    /// The database file a default-constructed instance opens. Resolved in
+    /// order: the --db override, the KAREER_DB_PATH environment variable
+    /// (used by autotests), the path configured in kareerrc, and finally
+    /// $XDG_DATA_HOME/kareer/kareer.sqlite.
     static QString defaultPath();
+
+    /// $XDG_DATA_HOME/kareer/kareer.sqlite, ignoring every override.
+    static QString standardPath();
+
+    /// Set from the --db command-line option; wins over everything else.
+    static void setPathOverride(const QString &path);
+
+    /// The user's chosen location (kareerrc); empty means standardPath().
+    static void setConfiguredPath(const QString &path);
+    static QString configuredPath();
+
+    /// True when --db or KAREER_DB_PATH decides the path, so the configured
+    /// location has no effect.
+    static bool hasForcedPath();
+
+    /// While true (GUI first run, before the user has picked a location), a
+    /// default-constructed instance opens nothing and reports an error.
+    static void setSelectionPending(bool pending);
+    static bool selectionPending();
+
+    /// The file this instance opened, or empty if it opened nothing.
+    QString path() const;
+
+    /// Reopens against defaultPath() if that no longer matches path() (the
+    /// user picked another location). Returns true if it reopened.
+    bool reopenIfPathChanged();
+
+    /// Performs a harmless write (rewrites the header's user_version), so
+    /// callers can tell a read-only file apart from a usable one.
+    bool checkWritable();
 
     bool isOpen() const;
     QString lastError() const;
@@ -59,9 +91,11 @@ public:
 
 private:
     void init(const QString &path);
+    void close();
     bool migrate();
     Job jobFromQuery(class QSqlQuery &query) const;
 
     QString m_connectionName;
+    QString m_path;
     QString m_lastError;
 };

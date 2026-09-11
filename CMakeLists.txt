@@ -36,12 +36,16 @@ find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS
     # QtQuick.Shapes runtime QML module (SankeyDiagram.qml); configure-time
     # guard only, nothing links against it.
     QuickShapesPrivate
+    # QtQuick.Dialogs runtime QML module (DatabaseSetupDialog.qml,
+    # SettingsPage.qml); configure-time guard only, nothing links against it.
+    QuickDialogs2
     QuickControls2
     Sql
     Test
 )
 
 find_package(KF6 ${REQUIRED_KF_VERSION} REQUIRED COMPONENTS
+    Config
     I18n
     CoreAddons
     IconThemes

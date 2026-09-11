@@ -22,6 +22,10 @@ namespace
 {
 QAtomicInteger<int> s_connectionCounter{0};
 
+QString s_pathOverride;
+QString s_configuredPath;
+bool s_selectionPending = false;
+
 QVariant salaryToVariant(int value)
 {
     if (value < 0) {
@@ -38,6 +42,10 @@ int salaryFromVariant(const QVariant &value)
 
 JobsDatabase::JobsDatabase()
 {
+    if (s_selectionPending) {
+        m_lastError = u"No database selected"_s;
+        return;
+    }
     init(defaultPath());
 }
 
@@ -48,6 +56,14 @@ JobsDatabase::JobsDatabase(const QString &path)
 
 JobsDatabase::~JobsDatabase()
 {
+    close();
+}
+
+void JobsDatabase::close()
+{
+    if (m_connectionName.isEmpty()) {
+        return;
+    }
     {
         QSqlDatabase db = QSqlDatabase::database(m_connectionName, false);
         if (db.isValid()) {
@@ -55,22 +71,103 @@ JobsDatabase::~JobsDatabase()
         }
     }
     QSqlDatabase::removeDatabase(m_connectionName);
+    m_connectionName.clear();
+    m_path.clear();
 }
 
 QString JobsDatabase::defaultPath()
 {
-    const QString overridePath = qEnvironmentVariable("KAREER_DB_PATH");
-    if (!overridePath.isEmpty()) {
-        return overridePath;
+    if (!s_pathOverride.isEmpty()) {
+        return s_pathOverride;
     }
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + u"/kareer"_s;
-    QDir().mkpath(dir);
-    return dir + u"/kareer.sqlite"_s;
+    const QString envPath = qEnvironmentVariable("KAREER_DB_PATH");
+    if (!envPath.isEmpty()) {
+        return envPath;
+    }
+    if (!s_configuredPath.isEmpty()) {
+        return s_configuredPath;
+    }
+    return standardPath();
+}
+
+QString JobsDatabase::standardPath()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + u"/kareer/kareer.sqlite"_s;
+}
+
+void JobsDatabase::setPathOverride(const QString &path)
+{
+    s_pathOverride = path;
+}
+
+void JobsDatabase::setConfiguredPath(const QString &path)
+{
+    s_configuredPath = path;
+}
+
+QString JobsDatabase::configuredPath()
+{
+    return s_configuredPath;
+}
+
+bool JobsDatabase::hasForcedPath()
+{
+    return !s_pathOverride.isEmpty() || !qEnvironmentVariableIsEmpty("KAREER_DB_PATH");
+}
+
+void JobsDatabase::setSelectionPending(bool pending)
+{
+    s_selectionPending = pending;
+}
+
+bool JobsDatabase::selectionPending()
+{
+    return s_selectionPending;
+}
+
+QString JobsDatabase::path() const
+{
+    return m_path;
+}
+
+bool JobsDatabase::reopenIfPathChanged()
+{
+    if (s_selectionPending) {
+        return false;
+    }
+    const QString wanted = defaultPath();
+    if (!m_path.isEmpty() && wanted == m_path) {
+        return false;
+    }
+    close();
+    m_lastError.clear();
+    init(wanted);
+    return true;
+}
+
+bool JobsDatabase::checkWritable()
+{
+    if (!isOpen()) {
+        return false;
+    }
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    if (!query.exec(u"PRAGMA user_version"_s) || !query.next()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    const int version = query.value(0).toInt();
+    query.finish();
+    if (!query.exec(u"PRAGMA user_version = %1"_s.arg(version))) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    return true;
 }
 
 void JobsDatabase::init(const QString &path)
 {
     m_connectionName = u"kareer_conn_%1"_s.arg(s_connectionCounter.fetchAndAddRelaxed(1));
+    m_path = path;
 
     QDir().mkpath(QFileInfo(path).absolutePath());
 
@@ -191,6 +288,9 @@ Job JobsDatabase::jobFromQuery(QSqlQuery &query) const
 QList<Job> JobsDatabase::allJobs() const
 {
     QList<Job> jobs;
+    if (!isOpen()) {
+        return jobs;
+    }
     QSqlQuery query(QSqlDatabase::database(m_connectionName));
     query.prepare(u"SELECT * FROM jobs ORDER BY date_applied DESC, id DESC"_s);
     if (!query.exec()) {
@@ -204,6 +304,9 @@ QList<Job> JobsDatabase::allJobs() const
 
 std::optional<Job> JobsDatabase::jobById(int id) const
 {
+    if (!isOpen()) {
+        return std::nullopt;
+    }
     QSqlQuery query(QSqlDatabase::database(m_connectionName));
     query.prepare(u"SELECT * FROM jobs WHERE id = :id"_s);
     query.bindValue(u":id"_s, id);
@@ -379,6 +482,9 @@ bool JobsDatabase::deleteJob(int id)
 QList<StageTransition> JobsDatabase::stageTransitions() const
 {
     QList<StageTransition> transitions;
+    if (!isOpen()) {
+        return transitions;
+    }
     QSqlQuery query(QSqlDatabase::database(m_connectionName));
     query.prepare(u"SELECT job_id, from_stage, to_stage, changed_at FROM stage_history ORDER BY changed_at ASC, id ASC"_s);
     if (!query.exec()) {

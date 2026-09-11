@@ -16,6 +16,22 @@ Every GUI action is also available from the `kareer` CLI
 (`add|list|show|update|stage|delete|stats|stages`) — run `./build/bin/kareer
 --help` to see the subcommands.
 
+To develop against a throwaway database instead of your real one, pass
+`--db` (the file is created if it doesn't exist); it works for the GUI and
+every subcommand:
+
+```sh
+./build/bin/kareer --db build/dev.sqlite add --company Acme --title Engineer
+./build/bin/kareer --db build/dev.sqlite
+```
+
+To see the first-run "where should the database live?" dialog, start with
+empty config and data directories:
+
+```sh
+XDG_CONFIG_HOME=$(mktemp -d) XDG_DATA_HOME=$(mktemp -d) ./build/bin/kareer
+```
+
 ## Test
 
 ```sh
