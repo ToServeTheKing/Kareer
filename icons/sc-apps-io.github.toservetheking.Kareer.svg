@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2026 ToServeTheKing <austin@thebennett.net> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  A K for Kareer, drawn as its application pipeline: the stem is every
+  application, splitting into a success path rising to an outcome and a
+  drop-off falling away. Plain shapes and gradients only, so QtSvg (which
+  ignores filters) renders it exactly as other renderers do.
+-->
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="backdrop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4cbcf2"/>
+      <stop offset="1" stop-color="#1c6ea9"/>
+    </linearGradient>
+    <linearGradient id="success" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#6ff0a0"/>
+    </linearGradient>
+    <linearGradient id="dropoff" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- shadow, rounded-square backdrop, and a soft highlight on its top half -->
+  <rect x="10" y="12" width="108" height="108" rx="24" fill="#0b2a44" fill-opacity="0.28"/>
+  <rect x="10" y="10" width="108" height="108" rx="24" fill="url(#backdrop)"/>
+  <rect x="10" y="10" width="108" height="54" rx="24" fill="#ffffff" fill-opacity="0.06"/>
+
+  <!-- the arms of the K: success rising, drop-off falling -->
+  <path d="M41,44 C67,44 67,20 95,20 L95,40 C67,40 67,64 41,64 Z" fill="url(#success)"/>
+  <path d="M41,64 C67,64 67,88 95,88 L95,108 C67,108 67,84 41,84 Z" fill="url(#dropoff)"/>
+
+  <!-- the stem (all applications) and the two outcomes -->
+  <rect x="27" y="20" width="14" height="88" rx="4" fill="#ffffff"/>
+  <rect x="95" y="20" width="6" height="20" rx="2" fill="#4be07a"/>
+  <rect x="95" y="88" width="6" height="20" rx="2" fill="#ffffff" fill-opacity="0.3"/>
+</svg>
