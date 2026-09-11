@@ -65,6 +65,17 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.5" date="2026-09-11">
+      <description>
+        <ul>
+          <li>Edit an application's full stage history, with a date for each step, so an application you log after the fact keeps its whole path (for example applied, interviewed, rejected)</li>
+          <li>Add a history command to show or replace a stage history from the command line</li>
+          <li>Mark applications with no response as Ghosted after 30 days, adjustable or off in Preferences</li>
+          <li>New app icon, now installed under the app ID so launchers and the Flatpak show it</li>
+          <li>Fix the Add Application form filling empty fields with the word "undefined"</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.4" date="2026-09-11">
       <description>
         <ul>
