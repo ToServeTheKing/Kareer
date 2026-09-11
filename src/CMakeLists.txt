@@ -21,6 +21,7 @@ qt_add_qml_module(kareer
         qml/DashboardPage.qml
         qml/SankeyDiagram.qml
         qml/SettingsPage.qml
+        qml/DatabaseSetupDialog.qml
     SOURCES
         jobsmodel.cpp
         jobsmodel.h
@@ -32,6 +33,8 @@ qt_add_qml_module(kareer
         jobeditmodel.h
         appcolorscheme.cpp
         appcolorscheme.h
+        databaselocation.cpp
+        databaselocation.h
 )
 
 target_include_directories(kareer PRIVATE ${CMAKE_BINARY_DIR})
@@ -44,6 +47,7 @@ target_link_libraries(kareer PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Sql
+    KF6::ConfigCore
     KF6::I18n
     KF6::I18nQml
     KF6::CoreAddons

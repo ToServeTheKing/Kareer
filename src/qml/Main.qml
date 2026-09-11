@@ -25,6 +25,27 @@ Kirigami.ApplicationWindow {
         id: jobsModel
     }
 
+    // The database moved (first-run choice or Preferences): reload the list,
+    // which cascades to the dashboard via countChanged, and leave any open
+    // edit form, since its job id belonged to the previous database.
+    Connections {
+        target: DatabaseLocation
+        function onChanged(): void {
+            jobsModel.refresh();
+            root.showDashboard();
+        }
+    }
+
+    DatabaseSetupDialog {
+        id: setupDialog
+    }
+
+    Component.onCompleted: {
+        if (DatabaseLocation.setupPending) {
+            setupDialog.open();
+        }
+    }
+
     // The job currently open in the edit form, so the sidebar can keep it highlighted.
     property int currentJobId: -1
 
