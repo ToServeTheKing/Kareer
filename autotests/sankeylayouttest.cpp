@@ -8,10 +8,13 @@
 #include "jobsdatabase.h"
 #include "sankeymodel.h"
 
+#include <QPointF>
+#include <QRegularExpression>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <limits>
 #include <memory>
 
 // SankeyModel always opens JobsDatabase::defaultPath(), so each test points
@@ -173,49 +176,115 @@ private Q_SLOTS:
         }
     }
 
-    void ribbonSlotsFollowEndpointHeights()
+    void ribbonsDoNotCross_data()
+    {
+        QTest::addColumn<int>("seed");
+        QTest::newRow("dense pipeline") << int(DenseSeed);
+        QTest::newRow("links skipping stages") << int(SkipSeed);
+        QTest::newRow("back and sideways moves") << int(BackMoveSeed);
+    }
+
+    // The "braid" bug: ribbons twisting over each other. Checked on the drawn
+    // geometry itself: no two ribbons may overlap anywhere between their ends.
+    void ribbonsDoNotCross()
+    {
+        QFETCH(int, seed);
+        JobsDatabase db;
+        seedPipeline(db, seed);
+
+        SankeyModel model;
+        for (const QSizeF size : {QSizeF(600, 300), QSizeF(900, 500), QSizeF(400, 800)}) {
+            model.reload(size.width(), size.height());
+            QVERIFY(!model.isEmpty());
+            verifyNoOverlaps(model, std::numeric_limits<qreal>::max());
+        }
+    }
+
+    // With one node per outcome, ribbons from different stages into different
+    // outcomes can't always keep their order; any such crossing must stay in
+    // the final gap where they rejoin, never braid across the diagram.
+    void crossingsOnlyWhereRibbonsRejoin()
     {
         JobsDatabase db;
-        seedDensePipeline(db);
+        seedPipeline(db, LargeSeed);
+
+        SankeyModel model;
+        model.reload(900, 500);
+        QVERIFY(!model.isEmpty());
+
+        QList<qreal> xs;
+        for (const QVariant &v : model.nodes()) {
+            const qreal x = v.toMap().value(QStringLiteral("x")).toReal();
+            if (!xs.contains(x)) {
+                xs.append(x);
+            }
+        }
+        std::sort(xs.begin(), xs.end());
+        QVERIFY(xs.size() >= 2);
+        verifyNoOverlaps(model, xs.at(xs.size() - 2) + nodeWidth);
+    }
+
+    // Each application is one left-to-right path: the funnel stages it
+    // reached, then its current stage if that is an outcome.
+    void historyCollapsesToForwardPaths()
+    {
+        JobsDatabase db;
+        seedPipeline(db, BackMoveSeed);
 
         SankeyModel model;
         model.reload(600, 300);
-        QVERIFY(!model.isEmpty());
 
-        QHash<QString, QVariantMap> nodeByStage;
-        for (const QVariant &v : model.nodes()) {
-            const QVariantMap m = v.toMap();
-            nodeByStage.insert(m.value(QStringLiteral("stage")).toString(), m);
-        }
-        const auto center = [&](const QString &stage) {
-            const QVariantMap n = nodeByStage.value(stage);
-            return n.value(QStringLiteral("y")).toReal() + n.value(QStringLiteral("height")).toReal() / 2.0;
-        };
-
-        // Outgoing ribbons must stack top-to-bottom in order of their
-        // target's height, incoming ones by their source's height, or the
-        // ribbons twist over each other right at the node.
-        QHash<QString, QList<QPair<qreal, qreal>>> outgoing; // sourceY -> target center
-        QHash<QString, QList<QPair<qreal, qreal>>> incoming; // targetY -> source center
+        QHash<QString, int> links;
         for (const QVariant &v : model.links()) {
             const QVariantMap m = v.toMap();
-            outgoing[m.value(QStringLiteral("fromStage")).toString()].append(
-                {m.value(QStringLiteral("sourceY")).toReal(), center(m.value(QStringLiteral("toStage")).toString())});
-            incoming[m.value(QStringLiteral("toStage")).toString()].append(
-                {m.value(QStringLiteral("targetY")).toReal(), center(m.value(QStringLiteral("fromStage")).toString())});
+            links.insert(m.value(QStringLiteral("fromStage")).toString() + QStringLiteral(">") + m.value(QStringLiteral("toStage")).toString(),
+                         m.value(QStringLiteral("value")).toInt());
         }
-        const auto verifySorted = [](QList<QPair<qreal, qreal>> slots) {
-            std::sort(slots.begin(), slots.end());
-            for (int i = 1; i < slots.size(); ++i) {
-                QVERIFY(slots.at(i).second >= slots.at(i - 1).second - 0.01);
-            }
+        const QHash<QString, int> expected{
+            {QStringLiteral("Start>Applied"), 4},
+            {QStringLiteral("Applied>Screening"), 2},
+            {QStringLiteral("Applied>Interview"), 2},
+            {QStringLiteral("Interview>Offer"), 1},
+            {QStringLiteral("Screening>Rejected"), 1},
+            {QStringLiteral("Screening>Withdrawn"), 1},
         };
-        for (const auto &slots : std::as_const(outgoing)) {
-            verifySorted(slots);
+        QCOMPARE(links, expected);
+
+        for (const QVariant &v : model.nodes()) {
+            const QVariantMap m = v.toMap();
+            // Ghosted was superseded by Rejected, so it isn't an outcome anyone ended in.
+            QVERIFY(m.value(QStringLiteral("stage")).toString() != QStringLiteral("Ghosted"));
+            if (m.value(QStringLiteral("stage")).toString() == QStringLiteral("Start")) {
+                QCOMPARE(m.value(QStringLiteral("value")).toInt(), 4);
+            }
         }
-        for (const auto &slots : std::as_const(incoming)) {
-            verifySorted(slots);
+    }
+
+    void contentIsVerticallyCentered()
+    {
+        JobsDatabase db;
+        seedPipeline(db, DenseSeed);
+
+        SankeyModel model;
+        model.reload(600, 300);
+
+        qreal top = std::numeric_limits<qreal>::max();
+        qreal bottom = std::numeric_limits<qreal>::lowest();
+        for (const QVariant &v : model.nodes()) {
+            const QVariantMap node = v.toMap();
+            top = qMin(top, node.value(QStringLiteral("y")).toReal());
+            bottom = qMax(bottom, node.value(QStringLiteral("y")).toReal() + node.value(QStringLiteral("height")).toReal());
         }
+        for (const QVariant &v : model.links()) {
+            const Ribbon ribbon = parseRibbon(v.toMap());
+            for (const QList<QPointF> *edge : {&ribbon.top, &ribbon.bottom}) {
+                for (const QPointF &p : *edge) {
+                    top = qMin(top, p.y());
+                    bottom = qMax(bottom, p.y());
+                }
+            }
+        }
+        QVERIFY2(qAbs(top - (300.0 - bottom)) < 0.05, qPrintable(QStringLiteral("top margin %1, bottom margin %2").arg(top).arg(300.0 - bottom)));
     }
 
     void sparseColumnsFillWidth()
@@ -303,6 +372,171 @@ private Q_SLOTS:
     }
 
 private:
+    enum Seed {
+        DenseSeed,
+        SkipSeed,
+        BackMoveSeed,
+        LargeSeed,
+    };
+
+    static void seedPipeline(JobsDatabase &db, int seed)
+    {
+        const auto S = [](const char *stage) {
+            return QString::fromLatin1(stage);
+        };
+        switch (seed) {
+        case DenseSeed:
+            seedDensePipeline(db);
+            break;
+        case SkipSeed:
+            walkJob(db, {S("Interview"), S("Offer"), S("Accepted")});
+            walkJob(db, {S("Screening"), S("Interview"), S("Rejected")});
+            walkJob(db, {S("Screening"), S("Rejected")});
+            walkJob(db, {S("Screening"), S("Interview"), S("Onsite"), S("Offer"), S("Accepted")});
+            walkJob(db, {S("Ghosted")});
+            walkJob(db, {});
+            addJobAt(db, S("Interview"));
+            break;
+        case BackMoveSeed:
+            walkJob(db, {S("Screening"), S("Ghosted"), S("Rejected")});
+            walkJob(db, {S("Interview"), S("Offer"), S("Interview")});
+            walkJob(db, {S("Rejected"), S("Interview")});
+            walkJob(db, {S("Screening"), S("Withdrawn")});
+            break;
+        case LargeSeed:
+            for (int i = 0; i < 12; ++i) {
+                walkJob(db, {});
+            }
+            for (int i = 0; i < 6; ++i) {
+                walkJob(db, {S("Ghosted")});
+            }
+            for (int i = 0; i < 5; ++i) {
+                walkJob(db, {S("Rejected")});
+            }
+            walkJob(db, {S("Withdrawn")});
+            for (int i = 0; i < 4; ++i) {
+                walkJob(db, {S("Screening"), S("Rejected")});
+            }
+            walkJob(db, {S("Screening"), S("Ghosted")});
+            walkJob(db, {S("Screening")});
+            for (int i = 0; i < 3; ++i) {
+                walkJob(db, {S("Screening"), S("Interview"), S("Rejected")});
+            }
+            walkJob(db, {S("Screening"), S("Interview"), S("Withdrawn")});
+            walkJob(db, {S("Interview"), S("Onsite"), S("Rejected")});
+            walkJob(db, {S("Screening"), S("Interview"), S("Onsite"), S("Offer"), S("Accepted")});
+            walkJob(db, {S("Screening"), S("Interview"), S("Onsite"), S("Offer"), S("Rejected")});
+            walkJob(db, {S("Screening"), S("Interview"), S("Onsite"), S("Offer")});
+            break;
+        }
+    }
+
+    static void addJobAt(JobsDatabase &db, const QString &stage)
+    {
+        Job job;
+        job.company = QStringLiteral("Co");
+        job.title = QStringLiteral("Title");
+        job.stage = stage;
+        QVERIFY(db.addJob(job));
+    }
+
+    /// A ribbon's outline as drawn: its top and bottom edges, each sampled
+    /// left to right.
+    struct Ribbon {
+        QString name;
+        QList<QPointF> top;
+        QList<QPointF> bottom;
+    };
+
+    /// Parses the absolute M/C/L/Z path SankeyModel generates. The outline
+    /// runs along the top edge, drops straight down at the target, and runs
+    /// back along the bottom edge.
+    static Ribbon parseRibbon(const QVariantMap &link)
+    {
+        Ribbon ribbon;
+        ribbon.name = link.value(QStringLiteral("fromStage")).toString() + QStringLiteral("->") + link.value(QStringLiteral("toStage")).toString();
+
+        static const QRegularExpression token(QStringLiteral("[MCLZ]|-?\\d+(?:\\.\\d+)?"));
+        QStringList tokens;
+        auto it = token.globalMatch(link.value(QStringLiteral("pathData")).toString());
+        while (it.hasNext()) {
+            tokens.append(it.next().captured());
+        }
+
+        QList<QPointF> *edge = &ribbon.top;
+        QPointF current;
+        int i = 0;
+        // Read coordinates one at a time: argument evaluation order is
+        // unspecified, so QPointF(next(), next()) could swap x and y.
+        const auto nextPoint = [&]() {
+            const qreal x = tokens.value(i++).toDouble();
+            const qreal y = tokens.value(i++).toDouble();
+            return QPointF(x, y);
+        };
+        while (i < tokens.size()) {
+            const QString command = tokens.at(i++);
+            if (command == QLatin1String("M")) {
+                current = nextPoint();
+                edge->append(current);
+            } else if (command == QLatin1String("L")) {
+                const QPointF next = nextPoint();
+                if (edge == &ribbon.top && qAbs(next.x() - current.x()) < 1e-6 && qAbs(next.y() - current.y()) > 1e-6) {
+                    edge = &ribbon.bottom; // the drop at the target
+                }
+                edge->append(next);
+                current = next;
+            } else if (command == QLatin1String("C")) {
+                const QPointF c1 = nextPoint();
+                const QPointF c2 = nextPoint();
+                const QPointF end = nextPoint();
+                constexpr int steps = 32;
+                for (int step = 1; step <= steps; ++step) {
+                    const qreal t = static_cast<qreal>(step) / steps;
+                    const qreal u = 1.0 - t;
+                    edge->append(current * (u * u * u) + c1 * (3 * u * u * t) + c2 * (3 * u * t * t) + end * (t * t * t));
+                }
+                current = end;
+            }
+        }
+        std::reverse(ribbon.bottom.begin(), ribbon.bottom.end());
+        return ribbon;
+    }
+
+    static qreal yAt(const QList<QPointF> &edge, qreal x)
+    {
+        for (int i = 1; i < edge.size(); ++i) {
+            const QPointF &a = edge.at(i - 1);
+            const QPointF &b = edge.at(i);
+            if (x >= a.x() && x <= b.x()) {
+                return b.x() - a.x() < 1e-9 ? a.y() : a.y() + (b.y() - a.y()) * (x - a.x()) / (b.x() - a.x());
+            }
+        }
+        return x < edge.first().x() ? edge.first().y() : edge.last().y();
+    }
+
+    /// Fails if any two ribbons overlap vertically anywhere in the x range
+    /// they share, left of xLimit (their shared end points excluded).
+    static void verifyNoOverlaps(const SankeyModel &model, qreal xLimit)
+    {
+        QList<Ribbon> ribbons;
+        for (const QVariant &v : model.links()) {
+            ribbons.append(parseRibbon(v.toMap()));
+        }
+        for (int a = 0; a < ribbons.size(); ++a) {
+            for (int b = a + 1; b < ribbons.size(); ++b) {
+                const Ribbon &ra = ribbons.at(a);
+                const Ribbon &rb = ribbons.at(b);
+                const qreal lo = qMax(ra.top.first().x(), rb.top.first().x()) + 0.25;
+                const qreal hi = std::min({ra.top.last().x(), rb.top.last().x(), xLimit}) - 0.25;
+                for (int step = 0; step <= 400 && lo < hi; ++step) {
+                    const qreal x = lo + (hi - lo) * step / 400.0;
+                    const qreal overlap = qMin(yAt(ra.bottom, x), yAt(rb.bottom, x)) - qMax(yAt(ra.top, x), yAt(rb.top, x));
+                    QVERIFY2(overlap < 0.5, qPrintable(QStringLiteral("%1 and %2 overlap by %3px at x=%4").arg(ra.name, rb.name).arg(overlap).arg(x)));
+                }
+            }
+        }
+    }
+
     static void makeJob(JobsDatabase &db, const QString &stage)
     {
         Job job;
