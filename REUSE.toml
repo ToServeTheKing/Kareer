@@ -16,6 +16,7 @@ SPDX-FileCopyrightText = "ToServeTheKing <austin@thebennett.net>"
 path = [
     "README.md",
     "CONTRIBUTING.md",
+    "CLAUDE.md",
     ".gitignore",
 ]
 SPDX-License-Identifier = "CC0-1.0"
