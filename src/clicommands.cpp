@@ -540,6 +540,74 @@ int runStats(const QString &program, const QStringList &args)
     return 0;
 }
 
+int runHistory(const QString &program, const QStringList &args)
+{
+    QCommandLineParser parser;
+    parser.setApplicationDescription(
+        u"Show an application's stage history, or replace it with the given steps, e.g.\n"
+        u"  kareer history 3 Applied=2026-08-01 Interview=2026-08-15 Rejected=2026-08-20\n"
+        u"The last step becomes the current stage and the first step's date the date applied."_s);
+    parser.addHelpOption();
+    addDbOption(parser);
+    parser.addOption({u"json"_s, u"Print machine-readable JSON"_s});
+    parser.addPositionalArgument(u"id"_s, u"Application id"_s);
+    parser.addPositionalArgument(u"steps"_s, u"Optional: Stage=YYYY-MM-DD for each step, replacing the history"_s, u"[steps...]"_s);
+    parser.process(QStringList{program} + args);
+
+    QTextStream err(stderr);
+    const QStringList positional = parser.positionalArguments();
+    if (positional.isEmpty()) {
+        err << u"Error: usage: kareer history <id> [Stage=YYYY-MM-DD ...]"_s << Qt::endl;
+        return 1;
+    }
+    bool ok = false;
+    const int id = positional.first().toInt(&ok);
+    if (!ok) {
+        err << u"Error: id must be an integer"_s << Qt::endl;
+        return 1;
+    }
+
+    JobsDatabase db;
+    if (!db.jobById(id)) {
+        err << u"Error: no application #%1"_s.arg(id) << Qt::endl;
+        return 1;
+    }
+
+    if (positional.size() > 1) {
+        QList<StageStep> steps;
+        for (const QString &arg : positional.mid(1)) {
+            const qsizetype separator = arg.indexOf(u'=');
+            const QString stage = arg.left(separator);
+            const QDate date = QDate::fromString(arg.mid(separator + 1), Qt::ISODate);
+            if (separator < 0 || !JobStage::isValid(stage) || !date.isValid()) {
+                err << u"Error: '%1' is not Stage=YYYY-MM-DD. Valid stages: %2"_s.arg(arg, JobStage::canonicalStages().join(u", "_s)) << Qt::endl;
+                return 1;
+            }
+            // Midday local time, so the calendar date survives time-zone conversion.
+            steps.append({stage, QDateTime(date, QTime(12, 0))});
+        }
+        if (!db.replaceStageHistory(id, steps)) {
+            err << u"Error: %1"_s.arg(db.lastError()) << Qt::endl;
+            return 1;
+        }
+    }
+
+    const QList<StageStep> steps = db.stageHistory(id);
+    if (parser.isSet(u"json"_s)) {
+        QJsonArray array;
+        for (const StageStep &step : steps) {
+            array.append(QJsonObject{{u"stage"_s, step.stage}, {u"date"_s, step.at.toLocalTime().date().toString(Qt::ISODate)}});
+        }
+        printJson(array);
+    } else {
+        QTextStream out(stdout);
+        for (const StageStep &step : steps) {
+            out << step.at.toLocalTime().date().toString(Qt::ISODate) << u"  "_s << step.stage << Qt::endl;
+        }
+    }
+    return 0;
+}
+
 int runStages(const QString &program, const QStringList &args)
 {
     QCommandLineParser parser;
@@ -571,7 +639,8 @@ int runHelp()
     out << u"Usage: kareer <command> [options]\n\n"_s << u"Commands:\n"_s << u"  add      Add a new job application\n"_s
         << u"  list     List job applications\n"_s << u"  show     Show one job application\n"_s << u"  update   Update fields on an existing application\n"_s
         << u"  stage    Move an application to a new stage\n"_s << u"  delete   Delete an application\n"_s << u"  stats    Summary statistics\n"_s
-        << u"  stages   List the canonical pipeline stages\n\n"_s << u"Run 'kareer <command> --help' for the options of a specific command.\n"_s
+        << u"  stages   List the canonical pipeline stages\n"_s << u"  history  Show or replace an application's stage history\n\n"_s
+        << u"Run 'kareer <command> --help' for the options of a specific command.\n"_s
         << u"Running kareer with no command (or an unrecognized one) starts the GUI.\n\n"_s << u"Global options:\n"_s
         << u"  --db <path>  Use this database file (created if missing) instead of the configured one\n"_s;
     return 0;
@@ -590,6 +659,7 @@ bool Cli::isSubcommand(const QString &arg)
         u"delete"_s,
         u"stats"_s,
         u"stages"_s,
+        u"history"_s,
         u"help"_s,
     };
     return subcommands.contains(arg);
@@ -625,6 +695,9 @@ int Cli::run(QCoreApplication &app)
     }
     if (subcommand == u"stages"_s) {
         return runStages(program, rest);
+    }
+    if (subcommand == u"history"_s) {
+        return runHistory(program, rest);
     }
     return runHelp();
 }

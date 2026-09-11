@@ -479,6 +479,148 @@ bool JobsDatabase::deleteJob(int id)
     return true;
 }
 
+QList<StageStep> JobsDatabase::stageHistory(int jobId) const
+{
+    QList<StageStep> steps;
+    if (!isOpen()) {
+        return steps;
+    }
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    query.prepare(u"SELECT to_stage, changed_at FROM stage_history WHERE job_id = :id ORDER BY changed_at ASC, id ASC"_s);
+    query.bindValue(u":id"_s, jobId);
+    if (!query.exec()) {
+        return steps;
+    }
+    while (query.next()) {
+        steps.append({query.value(0).toString(), QDateTime::fromString(query.value(1).toString(), Qt::ISODate)});
+    }
+    return steps;
+}
+
+bool JobsDatabase::replaceStageHistory(int jobId, QList<StageStep> steps)
+{
+    if (!jobById(jobId)) {
+        m_lastError = u"No job with id %1"_s.arg(jobId);
+        return false;
+    }
+    if (steps.isEmpty()) {
+        m_lastError = u"An application needs at least one stage"_s;
+        return false;
+    }
+    for (StageStep &step : steps) {
+        if (!JobStage::isValid(step.stage)) {
+            m_lastError = u"Unknown stage '%1'"_s.arg(step.stage);
+            return false;
+        }
+        if (!step.at.isValid()) {
+            m_lastError = u"Missing date for stage '%1'"_s.arg(step.stage);
+            return false;
+        }
+        step.stage = JobStage::canonical(step.stage);
+    }
+    std::stable_sort(steps.begin(), steps.end(), [](const StageStep &a, const StageStep &b) {
+        return a.at < b.at;
+    });
+    QList<StageStep> collapsed;
+    for (const StageStep &step : std::as_const(steps)) {
+        if (collapsed.isEmpty() || collapsed.last().stage != step.stage) {
+            collapsed.append(step);
+        }
+    }
+
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    if (!db.transaction()) {
+        m_lastError = db.lastError().text();
+        return false;
+    }
+    const auto fail = [&](const QSqlQuery &query) {
+        m_lastError = query.lastError().text();
+        db.rollback();
+        return false;
+    };
+
+    QSqlQuery query(db);
+    query.prepare(u"DELETE FROM stage_history WHERE job_id = :id"_s);
+    query.bindValue(u":id"_s, jobId);
+    if (!query.exec()) {
+        return fail(query);
+    }
+    QString previous;
+    for (const StageStep &step : std::as_const(collapsed)) {
+        query.prepare(u"INSERT INTO stage_history (job_id, from_stage, to_stage, changed_at) VALUES (:job_id, :from_stage, :to_stage, :changed_at)"_s);
+        query.bindValue(u":job_id"_s, jobId);
+        query.bindValue(u":from_stage"_s, previous.isEmpty() ? QVariant() : QVariant(previous));
+        query.bindValue(u":to_stage"_s, step.stage);
+        query.bindValue(u":changed_at"_s, step.at.toUTC().toString(Qt::ISODate));
+        if (!query.exec()) {
+            return fail(query);
+        }
+        previous = step.stage;
+    }
+    query.prepare(u"UPDATE jobs SET stage = :stage, date_applied = :date_applied, updated_at = :updated_at WHERE id = :id"_s);
+    query.bindValue(u":stage"_s, collapsed.last().stage);
+    query.bindValue(u":date_applied"_s, collapsed.first().at.toLocalTime().date().toString(Qt::ISODate));
+    query.bindValue(u":updated_at"_s, QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+    query.bindValue(u":id"_s, jobId);
+    if (!query.exec()) {
+        return fail(query);
+    }
+    if (!db.commit()) {
+        m_lastError = db.lastError().text();
+        db.rollback();
+        return false;
+    }
+    return true;
+}
+
+int JobsDatabase::ghostStaleApplications(int days, const QDateTime &now)
+{
+    if (days <= 0 || !isOpen()) {
+        return 0;
+    }
+
+    QList<int> stale;
+    {
+        QSqlQuery query(QSqlDatabase::database(m_connectionName));
+        query.prepare(
+            uR"(
+            SELECT j.id, j.date_applied, j.created_at, MAX(h.changed_at)
+            FROM jobs j LEFT JOIN stage_history h ON h.job_id = j.id
+            WHERE j.stage = :stage
+            GROUP BY j.id
+        )"_s);
+        query.bindValue(u":stage"_s, u"Applied"_s);
+        if (!query.exec()) {
+            m_lastError = query.lastError().text();
+            return 0;
+        }
+        while (query.next()) {
+            // A job logged today for an application sent weeks ago only
+            // starts its month today, and one moved back to Applied gets a
+            // fresh month: whichever happened last counts.
+            QDateTime lastActivity = QDateTime::fromString(query.value(3).toString(), Qt::ISODate);
+            if (!lastActivity.isValid()) {
+                lastActivity = QDateTime::fromString(query.value(2).toString(), Qt::ISODate);
+            }
+            const QDate applied = QDate::fromString(query.value(1).toString(), Qt::ISODate);
+            if (applied.isValid() && (!lastActivity.isValid() || applied.startOfDay() > lastActivity)) {
+                lastActivity = applied.startOfDay();
+            }
+            if (lastActivity.isValid() && lastActivity.addDays(days) < now) {
+                stale.append(query.value(0).toInt());
+            }
+        }
+    }
+
+    int moved = 0;
+    for (int id : std::as_const(stale)) {
+        if (setStage(id, u"Ghosted"_s)) {
+            ++moved;
+        }
+    }
+    return moved;
+}
+
 QList<StageTransition> JobsDatabase::stageTransitions() const
 {
     QList<StageTransition> transitions;

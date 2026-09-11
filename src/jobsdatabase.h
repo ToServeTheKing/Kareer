@@ -87,6 +87,23 @@ public:
 
     bool deleteJob(int id);
 
+    /// The steps one application went through, oldest first.
+    QList<StageStep> stageHistory(int jobId) const;
+
+    /// Rewrites an application's whole history in one transaction (used by
+    /// the history editor, e.g. to log Applied -> Interview -> Rejected after
+    /// the fact). Steps are sorted by time (stably), consecutive repeats of a
+    /// stage collapse into the first, the job's stage becomes the last step's
+    /// and its date applied the first step's date. Fails, changing nothing,
+    /// if there are no steps, a stage is unknown, or a time is invalid.
+    bool replaceStageHistory(int jobId, QList<StageStep> steps);
+
+    /// Moves every application still at Applied whose last activity (the
+    /// later of its date applied and its last stage change) is more than
+    /// `days` days before `now` to Ghosted, recorded through setStage() like
+    /// any other move. Returns how many were moved; does nothing if days <= 0.
+    int ghostStaleApplications(int days, const QDateTime &now = QDateTime::currentDateTimeUtc());
+
     QList<StageTransition> stageTransitions() const;
 
 private:

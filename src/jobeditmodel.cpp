@@ -29,6 +29,7 @@ bool isSalaryField(const QString &id)
 
 JobEditModel::JobEditModel(QObject *parent)
     : QAbstractListModel(parent)
+    , m_history(new StageHistoryModel(this))
     , m_fields(JobFieldCatalog::fields())
 {
     resetValues();
@@ -123,12 +124,30 @@ void JobEditModel::setEditingJobId(int id)
 void JobEditModel::resetValues()
 {
     m_values.clear();
-    m_loadedStage.clear();
 
     if (m_editingJobId < 0 || !m_jobsModel) {
+        m_history->load({{u"Applied"_s, QDateTime(QDate::currentDate(), QTime(12, 0)).toUTC()}});
+        // Every field needs a value of its own type: a missing one reaches
+        // QML as undefined, which a text field shows as the word "undefined"
+        // (typing "a" then gave "undefineda").
+        for (const Field &field : m_fields) {
+            switch (field.rowType) {
+            case TextRow:
+            case TextAreaRow:
+                m_values[field.id] = QString();
+                break;
+            case ComboRow:
+                m_values[field.id] = field.comboOptions.value(0);
+                break;
+            case SpinBoxRow:
+                m_values[field.id] = 0;
+                break;
+            case DateRow:
+                m_values[field.id] = QDate::currentDate();
+                break;
+            }
+        }
         m_values[u"currency"_s] = u"USD"_s;
-        m_values[u"stage"_s] = u"Applied"_s;
-        m_values[u"dateApplied"_s] = QDate::currentDate();
         m_values[u"remoteType"_s] = u"Unspecified"_s;
         m_values[u"salaryMin"_s] = 0;
         m_values[u"salaryMax"_s] = 0;
@@ -145,7 +164,18 @@ void JobEditModel::resetValues()
             }
             m_values[field.id] = value;
         }
-        m_loadedStage = m_values.value(u"stage"_s).toString();
+
+        QList<StageStep> steps = m_jobsModel->stageHistory(m_editingJobId);
+        if (steps.isEmpty()) {
+            steps.append({data.value(u"stage"_s).toString(), data.value(u"createdAt"_s).toDateTime()});
+        }
+        // The first step's recorded time is when the job was logged; show the
+        // date actually applied instead, which is what that step stands for.
+        const QDate applied = data.value(u"dateApplied"_s).toDate();
+        if (applied.isValid()) {
+            steps.first().at = QDateTime(applied, QTime(12, 0)).toUTC();
+        }
+        m_history->load(steps);
     }
 
     if (rowCount() > 0) {
@@ -165,6 +195,11 @@ QVariantList JobEditModel::categories() const
 QString JobEditModel::lastError() const
 {
     return m_lastError;
+}
+
+StageHistoryModel *JobEditModel::history() const
+{
+    return m_history;
 }
 
 void JobEditModel::setValue(int row, const QVariant &value)
@@ -207,28 +242,34 @@ bool JobEditModel::save()
         }
     }
 
+    // The history decides the current stage and the date applied.
+    const QList<StageStep> steps = m_history->steps();
+    fields[u"stage"_s] = steps.last().stage;
+    fields[u"dateApplied"_s] = steps.first().at.toLocalTime().date();
+
     if (m_editingJobId < 0) {
-        if (!m_jobsModel->addJob(fields)) {
+        const int id = m_jobsModel->addJob(fields);
+        // A new application's history is always written in full, so one
+        // logged after the fact (Applied, Interview, Rejected) keeps its path.
+        if (id < 0 || !m_jobsModel->replaceStageHistory(id, steps)) {
             setLastError(m_jobsModel->lastError());
             return false;
         }
         return true;
     }
 
+    // updateJob() deliberately never writes the stage; stage changes only
+    // ever come from the history.
     if (!m_jobsModel->updateJob(m_editingJobId, fields)) {
         setLastError(m_jobsModel->lastError());
         return false;
     }
-
-    // updateJob() deliberately never writes the stage (so every stage change
-    // lands in stage_history); route a changed stage through setStage().
-    const QString stage = fields.value(u"stage"_s).toString();
-    if (!stage.isEmpty() && stage != m_loadedStage) {
-        if (!m_jobsModel->setStage(m_editingJobId, stage)) {
+    if (m_history->isEdited()) {
+        if (!m_jobsModel->replaceStageHistory(m_editingJobId, steps)) {
             setLastError(m_jobsModel->lastError());
             return false;
         }
-        m_loadedStage = stage;
+        m_history->load(m_jobsModel->stageHistory(m_editingJobId));
     }
     return true;
 }

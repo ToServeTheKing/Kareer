@@ -46,6 +46,7 @@ add_executable(jobeditmodeltest
     ../src/jobsdatabase.cpp
     ../src/jobsmodel.cpp
     ../src/jobeditmodel.cpp
+    ../src/stagehistorymodel.cpp
     ../src/jobfieldcatalog.cpp
 )
 

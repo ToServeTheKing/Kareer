@@ -149,6 +149,57 @@ Kirigami.ScrollablePage {
                 }
             }
         }
+
+        Kirigami.ListSectionHeader {
+            Layout.fillWidth: true
+            text: i18nc("@title:group", "Applications")
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
+            Layout.topMargin: Kirigami.Units.smallSpacing
+            Layout.bottomMargin: Kirigami.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.Switch {
+                id: autoGhostSwitch
+                Layout.fillWidth: true
+                text: i18nc("@option:check", "Mark applications with no response as Ghosted")
+                checked: AutoGhost.enabled
+                onToggled: AutoGhost.enabled = checked
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                enabled: autoGhostSwitch.checked
+                spacing: Kirigami.Units.smallSpacing
+
+                QQC2.Label {
+                    text: i18nc("@label:spinbox Mark as ghosted after [N] days", "After")
+                }
+                QQC2.SpinBox {
+                    from: 1
+                    to: 365
+                    value: AutoGhost.days
+                    onValueModified: AutoGhost.days = value
+                }
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    text: i18nc("@label:spinbox Mark as ghosted after [N] days", "days without any activity")
+                    wrapMode: Text.Wrap
+                }
+            }
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                text: i18nc("@info", "Only applications still at Applied are affected. The move is recorded in their history, and you can change the stage back at any time.")
+                wrapMode: Text.Wrap
+                font: Kirigami.Theme.smallFont
+                opacity: 0.7
+            }
+        }
     }
 
     Component.onCompleted: DatabaseLocation.clearMessages()

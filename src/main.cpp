@@ -6,6 +6,7 @@
 
 #include "kareer-version.h"
 
+#include "autoghost.h"
 #include "clicommands.h"
 #include "databaselocation.h"
 #include "jobsdatabase.h"
@@ -110,6 +111,10 @@ int main(int argc, char *argv[])
     if (argc >= 2 && Cli::isSubcommand(QString::fromLocal8Bit(argv[1]))) {
         QCoreApplication app(argc, argv);
         DatabaseLocation::loadConfiguredPath();
+        if (const int ghosted = AutoGhost::runNow(); ghosted > 0) {
+            // stderr, so --json output on stdout stays machine-readable.
+            fprintf(stderr, "kareer: marked %d application(s) with no response as Ghosted\n", ghosted);
+        }
         return Cli::run(app);
     }
 
@@ -134,7 +139,7 @@ int main(int argc, char *argv[])
     aboutData.setDesktopFileName(u"io.github.toservetheking.Kareer"_s);
     KAboutData::setApplicationData(aboutData);
 
-    QApplication::setWindowIcon(QIcon::fromTheme(u"io.github.toservetheking.Kareer"_s, QIcon::fromTheme(u"office-address-book"_s)));
+    QApplication::setWindowIcon(QIcon::fromTheme(u"io.github.toservetheking.Kareer"_s, QIcon(u":/icons/sc-apps-io.github.toservetheking.Kareer.svg"_s)));
 
     KCrash::initialize();
 
@@ -149,6 +154,9 @@ int main(int argc, char *argv[])
     // First run (or the configured file has gone missing): open nothing until
     // the user picks a location in DatabaseSetupDialog. The CLI never waits.
     JobsDatabase::setSelectionPending(DatabaseLocation::needsSetup());
+    if (!JobsDatabase::selectionPending()) {
+        AutoGhost::runNow(); // before the models load; Main.qml reports the count
+    }
 
     QQmlApplicationEngine engine;
     KLocalization::setupLocalizedContext(&engine);

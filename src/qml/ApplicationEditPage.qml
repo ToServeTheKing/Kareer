@@ -103,7 +103,80 @@ Kirigami.ScrollablePage {
                     filterString: section.modelData.id
                 }
 
+                // The Pipeline category has no plain fields: it is the
+                // application's stage history. The last step is its current
+                // stage, the first step's date its date applied.
                 ColumnLayout {
+                    visible: section.modelData.id === "pipeline"
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing
+
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        text: i18nc("@info", "Every stage this application went through, oldest first. The first date is when you applied, and the last stage is where it stands now.")
+                        wrapMode: Text.Wrap
+                        font: Kirigami.Theme.smallFont
+                        opacity: 0.7
+                    }
+
+                    Repeater {
+                        model: section.modelData.id === "pipeline" ? editModel.history : null
+
+                        delegate: RowLayout {
+                            id: stepRow
+                            required property int index
+                            required property string stage
+                            required property var date
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            QQC2.ComboBox {
+                                Layout.fillWidth: true
+                                model: editModel.history.stages
+                                currentIndex: editModel.history.stages.indexOf(stepRow.stage)
+                                onActivated: editModel.history.setStage(stepRow.index, currentText)
+                                Accessible.name: i18nc("@label:listbox", "Stage")
+                            }
+                            QQC2.Button {
+                                text: Qt.formatDate(stepRow.date, Qt.ISODate)
+                                icon.name: "view-calendar-day"
+                                Accessible.name: i18nc("@action:button", "Date of this stage")
+                                onClicked: {
+                                    stepDatePopup.value = stepRow.date;
+                                    stepDatePopup.open();
+                                }
+
+                                DateTime.DatePopup {
+                                    id: stepDatePopup
+                                    onAccepted: editModel.history.setDate(stepRow.index, value)
+                                }
+                            }
+                            QQC2.ToolButton {
+                                icon.name: "list-remove"
+                                text: i18nc("@action:button", "Remove Step")
+                                display: QQC2.AbstractButton.IconOnly
+                                enabled: editModel.history.count > 1
+                                QQC2.ToolTip.text: text
+                                QQC2.ToolTip.visible: hovered
+                                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                                onClicked: editModel.history.removeStep(stepRow.index)
+                            }
+                        }
+                    }
+
+                    QQC2.Button {
+                        icon.name: "list-add"
+                        text: i18nc("@action:button", "Add Step")
+                        onClicked: editModel.history.appendStep()
+                    }
+                }
+
+                ColumnLayout {
+                    visible: rowRepeater.count > 0
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing

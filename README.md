@@ -15,12 +15,18 @@ applications without ever opening a window.
   salary expectation, notes, contact, and the date applied
 - A fixed pipeline of stages (Applied, Screening, Interview, Onsite,
   Offer, Accepted, Rejected, Withdrawn, Ghosted) with full history of
-  every transition
+  every transition. The history is editable, with a date per step, so an
+  application you log after the fact (applied, interviewed, rejected)
+  keeps its whole path
 - A Sankey diagram of the whole pipeline, showing where applications
   progress and where they drop off
 - Dashboard summary stats: total applications, active count, offers,
   response rate
-- A full CLI (`kareer add|list|show|update|stage|delete|stats|stages`)
+- Applications with no response are marked Ghosted automatically:
+  anything still at Applied with no activity for 30 days (adjustable, or
+  off, under Preferences). The move is recorded in its history like any
+  other, and the CLI notes it on stderr so `--json` output stays clean.
+- A full CLI (`kareer add|list|show|update|stage|history|delete|stats|stages`)
   for scripting
 
 ## Command line usage
@@ -48,6 +54,10 @@ kareer list --company Acme --json
 kareer show 1
 kareer update 1 --salary-max 175000
 kareer stage 1 Interview
+
+# Show or rewrite an application's stage history, one Stage=date per step
+kareer history 1
+kareer history 1 Applied=2026-08-01 Interview=2026-08-15 Rejected=2026-08-20
 
 # Delete (requires --yes to actually happen)
 kareer delete 1 --yes
@@ -169,10 +179,14 @@ Run the tests with `ctest --test-dir build`.
   draws what this hands back.
 - `jobfieldcatalog.{h,cpp}` - the static catalog of edit-form fields and categories.
 - `jobeditmodel.{h,cpp}` - `QAbstractListModel`-backed edit-form state, built from the field catalog.
+- `stagehistorymodel.{h,cpp}` - the editable stage history shown in the edit form's Pipeline section.
 - `clicommands.{h,cpp}` - the `add`/`list`/`show`/`update`/`stage`/
-  `delete`/`stats`/`stages` subcommands.
+  `history`/`delete`/`stats`/`stages` subcommands.
 - `appcolorscheme.{h,cpp}` - QML-facing wrapper around `KColorSchemeManager` for the Preferences page.
+- `databaselocation.{h,cpp}` - where the database lives: the first-run choice and the Preferences Database section.
+- `autoghost.{h,cpp}` - marks applications with no response as Ghosted, and its Preferences setting.
 - `qml/` - Kirigami UI: `ApplicationsPage` (list + search),
   `ApplicationEditPage` (add/edit/delete form), `DashboardPage`
   (stat cards + pipeline), `SankeyDiagram` (the renderer),
-  `SettingsPage` (the Preferences page).
+  `SettingsPage` (the Preferences page), `DatabaseSetupDialog`
+  (the first-run database choice).

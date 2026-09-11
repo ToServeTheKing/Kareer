@@ -5,7 +5,6 @@
 */
 
 #include "jobfieldcatalog.h"
-#include "jobstage.h"
 
 using namespace Qt::Literals::StringLiterals;
 
@@ -37,8 +36,9 @@ QList<Field> fields()
          0,
          0},
 
-        {u"stage"_s, u"pipeline"_s, QStringLiteral("Stage:"), ComboRow, JobStage::canonicalStages(), {}, 0, 0},
-        {u"dateApplied"_s, u"pipeline"_s, QStringLiteral("Date Applied:"), DateRow, {}, {}, 0, 0},
+        // The "pipeline" category has no plain fields: ApplicationEditPage
+        // shows JobEditModel::history there (stage and date applied come
+        // from the history's last and first steps).
 
         {u"salaryMin"_s, u"salary"_s, QStringLiteral("Range Minimum:"), SpinBoxRow, {}, {}, 0, 5000000},
         {u"salaryMax"_s, u"salary"_s, QStringLiteral("Range Maximum:"), SpinBoxRow, {}, {}, 0, 5000000},

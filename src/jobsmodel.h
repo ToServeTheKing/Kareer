@@ -60,10 +60,14 @@ public:
     /// Full record for one job, for prefilling the edit dialog.
     Q_INVOKABLE QVariantMap jobData(int id) const;
 
-    Q_INVOKABLE bool addJob(const QVariantMap &fields);
+    /// Adds a job and returns its id, or -1 on failure (see lastError()).
+    Q_INVOKABLE int addJob(const QVariantMap &fields);
     Q_INVOKABLE bool updateJob(int id, const QVariantMap &fields);
     Q_INVOKABLE bool setStage(int id, const QString &stage);
     Q_INVOKABLE bool removeJob(int id);
+
+    QList<StageStep> stageHistory(int id) const;
+    bool replaceStageHistory(int id, const QList<StageStep> &steps);
 
     Q_INVOKABLE QString lastError() const;
 
