@@ -3,7 +3,7 @@
 
 # Maintainer: Austin Bennett <austin at thebennett dot net>
 pkgname=kareer
-pkgver=0.1.4
+pkgver=0.1.5
 pkgrel=1
 pkgdesc="Job application tracker with a Sankey pipeline view and a scriptable CLI (Kirigami)"
 arch=('x86_64')
@@ -29,7 +29,7 @@ makedepends=(
 )
 checkdepends=(appstream)
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('e73e7a552bca68fc3f869c96efc607f0862564b3e5f99a505ff33b618bc5cb71')
+sha256sums=('bc1011f9a013d8d2b266da0fed7cbb50f7410e71b007844bfb9598639504168c')
 
 build() {
   cmake -B build -S "Kareer-$pkgver" \
