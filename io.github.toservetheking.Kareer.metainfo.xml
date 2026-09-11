@@ -65,6 +65,18 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.4" date="2026-09-11">
+      <description>
+        <ul>
+          <li>Fix Save on the edit form silently dropping stage changes, and report missing company or title</li>
+          <li>Rework the pipeline diagram so drop-offs split off each stage and rejoin their outcome without braiding</li>
+          <li>Count each application once in the pipeline, so moving back a stage or being ghosted then rejected no longer draws extra ribbons</li>
+          <li>Choose where the database lives on first run: the default location, a folder of your choice, or an existing database</li>
+          <li>Move, open or reset the database location from Preferences</li>
+          <li>Add a --db option to use a specific database file from the command line or the GUI</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.3" date="2026-08-31">
       <description>
         <ul>
