@@ -7,6 +7,8 @@
 #include "kareer-version.h"
 
 #include "clicommands.h"
+#include "databaselocation.h"
+#include "jobsdatabase.h"
 
 #include <KAboutData>
 #include <KCrash>
@@ -17,6 +19,7 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QCoreApplication>
+#include <QFileInfo>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
@@ -63,12 +66,50 @@ static void messageHandler(QtMsgType type, const QMessageLogContext &context, co
     }
 }
 
+/// Removes "--db <path>" / "--db=<path>" from argv (anywhere on the command
+/// line, for both the GUI and every subcommand) and applies it as the
+/// database override. Stripping it up front keeps "kareer --db x list"
+/// routing to the CLI. Returns false if --db is missing its value.
+static bool takeDbOption(int &argc, char **argv)
+{
+    int out = 1;
+    for (int in = 1; in < argc; ++in) {
+        const QString arg = QString::fromLocal8Bit(argv[in]);
+        QString value;
+        if (arg == u"--db"_s) {
+            if (in + 1 >= argc) {
+                fprintf(stderr, "kareer: --db requires a path\n");
+                return false;
+            }
+            value = QString::fromLocal8Bit(argv[++in]);
+        } else if (arg.startsWith(u"--db="_s)) {
+            value = arg.mid(5);
+        } else {
+            argv[out++] = argv[in];
+            continue;
+        }
+        if (value.isEmpty()) {
+            fprintf(stderr, "kareer: --db requires a path\n");
+            return false;
+        }
+        JobsDatabase::setPathOverride(QFileInfo(value).absoluteFilePath());
+    }
+    argv[out] = nullptr;
+    argc = out;
+    return true;
+}
+
 int main(int argc, char *argv[])
 {
     s_defaultMessageHandler = qInstallMessageHandler(messageHandler);
 
+    if (!takeDbOption(argc, argv)) {
+        return 1;
+    }
+
     if (argc >= 2 && Cli::isSubcommand(QString::fromLocal8Bit(argv[1]))) {
         QCoreApplication app(argc, argv);
+        DatabaseLocation::loadConfiguredPath();
         return Cli::run(app);
     }
 
@@ -99,8 +140,15 @@ int main(int argc, char *argv[])
 
     QCommandLineParser parser;
     aboutData.setupCommandLine(&parser);
+    // Handled (and stripped) by takeDbOption(); declared here for --help.
+    parser.addOption(QCommandLineOption(u"db"_s, i18n("Use this database file instead of the configured one."), i18n("path")));
     parser.process(app);
     aboutData.processCommandLine(&parser);
+
+    DatabaseLocation::loadConfiguredPath();
+    // First run (or the configured file has gone missing): open nothing until
+    // the user picks a location in DatabaseSetupDialog. The CLI never waits.
+    JobsDatabase::setSelectionPending(DatabaseLocation::needsSetup());
 
     QQmlApplicationEngine engine;
     KLocalization::setupLocalizedContext(&engine);

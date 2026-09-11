@@ -17,6 +17,7 @@ JobsModel::JobsModel(QObject *parent)
 
 void JobsModel::refresh()
 {
+    m_db.reopenIfPathChanged();
     beginResetModel();
     m_jobs = m_db.allJobs();
     endResetModel();

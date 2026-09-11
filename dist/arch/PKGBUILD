@@ -12,6 +12,7 @@ license=('GPL-3.0-or-later')
 depends=(
   hicolor-icon-theme
   kcolorscheme
+  kconfig
   kcoreaddons
   kcrash
   ki18n
