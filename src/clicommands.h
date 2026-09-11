@@ -11,7 +11,7 @@
 class QCoreApplication;
 
 /**
- * Headless command-line interface: `kareer add|list|show|update|stage|delete|stats|stages ...`.
+ * Headless command-line interface: `kareer add|list|show|update|stage|history|delete|stats|stages ...`.
  * Lets other tools (a resume generator, a shell script) log and query
  * applications without ever starting the Kirigami GUI.
  */

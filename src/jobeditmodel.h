@@ -8,6 +8,7 @@
 
 #include "jobfieldcatalog.h"
 #include "jobsmodel.h"
+#include "stagehistorymodel.h"
 
 #include <QAbstractListModel>
 #include <QHash>
@@ -29,6 +30,9 @@ class JobEditModel : public QAbstractListModel
     Q_PROPERTY(int editingJobId READ editingJobId WRITE setEditingJobId NOTIFY editingJobIdChanged)
     Q_PROPERTY(QVariantList categories READ categories CONSTANT)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    /// The application's stage history (the Pipeline section): the last step
+    /// is its current stage, the first step's date its date applied.
+    Q_PROPERTY(StageHistoryModel *history READ history CONSTANT)
 
 public:
     enum Roles {
@@ -58,6 +62,7 @@ public:
 
     QVariantList categories() const;
     QString lastError() const;
+    StageHistoryModel *history() const;
 
     /// Updates the value for the field at this row (called from the QML delegate).
     Q_INVOKABLE void setValue(int row, const QVariant &value);
@@ -80,6 +85,6 @@ private:
     int m_editingJobId = -1;
     QHash<QString, QVariant> m_values;
     QString m_lastError;
-    QString m_loadedStage; ///< Stage as loaded from the database, to detect stage changes on save.
+    StageHistoryModel *m_history = nullptr;
     QList<JobFieldCatalog::Field> m_fields;
 };
