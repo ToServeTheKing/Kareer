@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- SPDX-FileCopyrightText: 2026 ToServeTheKing <austin@thebennett.net> -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!--
-  A K for Kareer, drawn as its application pipeline: the stem is every
-  application, splitting into a success path rising to an outcome and a
-  drop-off falling away. Plain shapes and gradients only, so QtSvg (which
-  ignores filters) renders it exactly as other renderers do.
--->
 <svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    A K for Kareer, drawn as its application pipeline: the stem is every
+    application, splitting into a success path rising to an outcome and a
+    drop-off falling away. Plain shapes and gradients only, so QtSvg (which
+    ignores filters) renders it exactly as other renderers do.
+  -->
+  <!-- Keep this comment inside <svg>: loaders sniff for "<svg" in the first
+       256 bytes, so a long header comment makes the file unrecognisable. -->
   <defs>
     <linearGradient id="backdrop" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#4cbcf2"/>
