@@ -14,11 +14,15 @@ SPDX-FileCopyrightText = "ToServeTheKing <austin@thebennett.net>"
 
 [[annotations]]
 path = [
-    "README.md",
     "CONTRIBUTING.md",
-    "CLAUDE.md",
-    "server/README.md",
+    "SECURITY.md",
+    ".github/ISSUE_TEMPLATE/*.md",
     ".gitignore",
 ]
 SPDX-License-Identifier = "CC0-1.0"
 SPDX-FileCopyrightText = "ToServeTheKing <austin@thebennett.net>"
+
+[[annotations]]
+path = "CODE_OF_CONDUCT.md"
+SPDX-License-Identifier = "CC-BY-4.0"
+SPDX-FileCopyrightText = "Contributor Covenant contributors <https://www.contributor-covenant.org>"

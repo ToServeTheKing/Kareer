@@ -230,8 +230,7 @@ def test_add_application_reaches_sync_and_refuses_duplicates(client):
     assert record["fields"]["remote_type"] == "Hybrid"
     assert record["fields"]["date_applied"] == "2026-10-25"
     assert record["fields"]["created_at"].endswith("Z")
-    assert [s["stage"] for s in record["history"]] == ["Applied", "Screening"]
-    assert record["history"][0]["at"] == "2026-10-25T12:00:00.000Z"
+    assert record["history"] == [{"stage": "Screening", "at": "2026-10-25T12:00:00.000Z"}]
 
     again = call_tool(client, token, "add_application", {"company": "caterpillar", "title": "software engineer"})
     assert again.get("isError") and "Already logged" in again["content"][0]["text"]
@@ -241,6 +240,29 @@ def test_add_application_reaches_sync_and_refuses_duplicates(client):
     assert len(client.store.live_jobs()) == 2
 
 
+def test_set_history_replaces_the_whole_history(client):
+    token = client.login_as("austin")
+    added = call_tool(client, token, "add_application",
+                      {"company": "Acme", "title": "Dev", "date_applied": "2026-10-01"})
+    uuid = json.loads(added["content"][0]["text"])["id"]
+    call_tool(client, token, "set_stage", {"id": uuid, "stage": "Withdrawn", "date": "2026-10-03"})
+
+    fixed = call_tool(client, token, "set_history",
+                      {"id": uuid, "steps": [{"stage": "withdrawn", "date": "2026-09-30"}]})
+    assert not fixed.get("isError"), fixed
+    pulled = client.post("/api/sync", json={"since": 0, "jobs": []},
+                         headers={"Authorization": f"Bearer {token}"}).json()["jobs"]
+    record = next(r for r in pulled if r["uuid"] == uuid)
+    assert record["history"] == [{"stage": "Withdrawn", "at": "2026-09-30T12:00:00.000Z"}]
+    assert record["fields"]["date_applied"] == "2026-09-30"
+
+    same_day = call_tool(client, token, "set_history",
+                         {"id": uuid, "steps": [{"stage": "Applied", "date": "2026-10-01"},
+                                                {"stage": "Rejected", "date": "2026-10-01"}]})
+    history = json.loads(same_day["content"][0]["text"])["history"]
+    assert [s["stage"] for s in history] == ["Applied", "Rejected"]
+
+
 def test_tool_errors_reach_the_assistant(client):
     token = client.login_as("austin")
     for name, arguments, expected in [
@@ -248,6 +270,10 @@ def test_tool_errors_reach_the_assistant(client):
         ("get_application", {"id": "nope"}, "No application with id nope"),
         ("add_application", {"company": "Acme", "title": "Dev", "stage": "Hired"}, "Unknown stage 'Hired'"),
         ("add_application", {"company": "Acme", "title": "Dev", "date_applied": "Oct 5"}, "Dates are YYYY-MM-DD"),
+        ("set_history", {"id": "nope", "steps": [{"stage": "Applied", "date": "2026-10-01"}]},
+         "No application with id nope"),
+        ("set_history", {"id": "nope", "steps": []}, "at least one"),
+        ("set_history", {"id": "nope", "steps": [{"stage": "Hired", "date": "2026-10-01"}]}, "Unknown stage 'Hired'"),
     ]:
         result = call_tool(client, token, name, arguments)
         assert result.get("isError") and expected in result["content"][0]["text"], (name, result)

@@ -93,8 +93,8 @@ def create_app(store: Store, public_url: str, authentik: AuthentikConfig, regist
         name="Kareer",
         instructions=(
             "Kareer is the user's job application tracker. Use list_applications to find an "
-            "application by company or title, then set_stage to record that it moved, or "
-            "add_application to log a new one. "
+            "application by company or title, then set_stage to record that it moved, "
+            "add_application to log a new one, or set_history to correct a history that is wrong. "
             f"Stages: {', '.join(STAGES)}. Moves are recorded in the application's stage "
             "history, which the desktop app syncs."
         ),
@@ -150,8 +150,9 @@ def create_app(store: Store, public_url: str, authentik: AuthentikConfig, regist
         allow_duplicate: bool = False,
     ) -> dict[str, Any]:
         """Log a new job application. `date_applied` is YYYY-MM-DD (default today).
-        `stage` is where it stands now (default Applied); anything else is recorded as
-        a move on from Applied. `remote_type` is Onsite, Hybrid or Remote. Refuses if an
+        `stage` is where it stands now (default Applied), recorded as the only step of
+        its history on `date_applied`, so an application logged as Withdrawn never shows
+        as Applied. `remote_type` is Onsite, Hybrid or Remote. Refuses if an
         application with the same company and title already exists (check with
         list_applications, or pass allow_duplicate=true for a genuinely separate one)."""
         company, title = company.strip(), title.strip()
@@ -172,12 +173,8 @@ def create_app(store: Store, public_url: str, authentik: AuthentikConfig, regist
                 raise ToolError(f"remote_type is one of {', '.join(REMOTE_TYPES)}")
         now = datetime.now(UTC)
         day = _parse_day(date_applied) if date_applied else now.date()
-        # Never in the future, and a second ahead of any later stage so the
-        # two steps can't swap places when a client sorts them.
-        applied_at = min(datetime.combine(day, time(12), UTC), now - timedelta(seconds=1))
-        history = [{"stage": "Applied", "at": _stamp(applied_at)}]
-        if canonical != "Applied":
-            history.append({"stage": canonical, "at": _stamp(now)})
+        # Like JobsDatabase::addJob, the starting stage is the whole history.
+        history = [{"stage": canonical, "at": _stamp(min(datetime.combine(day, time(12), UTC), now))}]
         fields = {
             "company": company, "title": title, "date_applied": day.isoformat(), "location": location,
             "remote_type": remote_type, "source": source, "url": url, "notes": notes, "contact": contact,
@@ -201,6 +198,30 @@ def create_app(store: Store, public_url: str, authentik: AuthentikConfig, regist
         except ValueError as error:
             raise ToolError(str(error)) from None
         return _summary(record) | {"history": record["history"]}
+
+    @mcp.tool()
+    def set_history(id: str, steps: list[dict[str, str]]) -> dict[str, Any]:
+        """Replace an application's whole stage history, to correct one that is wrong
+        (a stage it never reached, a wrong date). `steps` is a list of
+        {"stage": ..., "date": "YYYY-MM-DD"}; steps on the same date keep their list
+        order. The last step becomes the current stage and the first step's date
+        becomes date_applied. Use set_stage for an ordinary move."""
+        if not steps:
+            raise ToolError("steps must list at least one {stage, date}")
+        history = []
+        for index, step in enumerate(steps):
+            stage = str(step.get("stage", ""))
+            if canonical_stage(stage) is None:
+                raise ToolError(f"Unknown stage '{stage}'. Valid stages: {', '.join(STAGES)}")
+            day = _parse_day(str(step.get("date", "")))
+            # A second apart so same-day steps keep their order when sorted.
+            at = datetime.combine(day, time(12), UTC) + timedelta(seconds=index)
+            history.append({"stage": stage, "at": _stamp(at)})
+        try:
+            record = store.replace_history(id, history)
+        except KeyError:
+            raise ToolError(f"No application with id {id}") from None
+        return _summary(record) | {"fields": record["fields"], "history": record["history"]}
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> Response:
