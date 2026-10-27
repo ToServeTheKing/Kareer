@@ -54,6 +54,9 @@ Item {
         model: sankeyModel.links
         delegate: Shape {
             required property var modelData
+            // The default geometry renderer leaves the ribbon curves jagged;
+            // the curve renderer anti-aliases them without an MSAA layer.
+            preferredRendererType: Shape.CurveRenderer
             ShapePath {
                 fillColor: modelData.color
                 strokeColor: "transparent"
