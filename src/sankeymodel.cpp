@@ -652,7 +652,9 @@ void SankeyModel::relayout(qreal width, qreal height, qreal nodeWidth, qreal pad
         }
         path += u" Z"_s;
 
-        QColor linkColor = JobStage::color(link.from);
+        // Color by destination: every ribbon leaving a node shares its
+        // source, so source colors made siblings indistinguishable.
+        QColor linkColor = JobStage::color(link.to);
         linkColor.setAlphaF(0.5);
 
         m_links.append(QVariantMap{

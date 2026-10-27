@@ -59,7 +59,10 @@ Item {
             preferredRendererType: Shape.CurveRenderer
             ShapePath {
                 fillColor: modelData.color
-                strokeColor: "transparent"
+                // A hairline in the background color keeps adjacent ribbons
+                // apart; thin ribbons get a thinner one so it can't eat them.
+                strokeColor: Kirigami.Theme.backgroundColor
+                strokeWidth: Math.min(1, modelData.thickness / 4)
                 PathSvg {
                     path: modelData.pathData
                 }
