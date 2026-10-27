@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 ToServeTheKing <austin@thebennett.net>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[project]
+name = "kareer-server"
+version = "0.1.0"
+description = "Sync and MCP server for Kareer"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=2.3,<3",
+    "httpx>=0.28",
+    "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+kareer-server = "kareer_server.app:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["kareer_server"]

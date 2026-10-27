@@ -152,6 +152,93 @@ Kirigami.ScrollablePage {
 
         Kirigami.ListSectionHeader {
             Layout.fillWidth: true
+            text: i18nc("@title:group", "Sync")
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
+            Layout.topMargin: Kirigami.Units.smallSpacing
+            Layout.bottomMargin: Kirigami.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                text: i18nc("@label:textbox", "Server")
+            }
+            QQC2.TextField {
+                Layout.fillWidth: true
+                text: Sync.serverUrl
+                placeholderText: i18nc("@info:placeholder", "https://kareer.example.com")
+                enabled: !Sync.signedIn && !Sync.busy
+                inputMethodHints: Qt.ImhUrlCharactersOnly
+                onEditingFinished: Sync.serverUrl = text
+            }
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                opacity: 0.7
+                text: {
+                    if (Sync.busy) {
+                        return i18nc("@info", "Syncing…");
+                    }
+                    if (Sync.serverUrl.length === 0) {
+                        return i18nc("@info", "Sync needs a Kareer server you run yourself. Enter its address to keep your applications the same on every computer you use Kareer on.");
+                    }
+                    if (!Sync.signedIn) {
+                        return i18nc("@info", "Sign in to keep your applications the same on every computer you use Kareer on.");
+                    }
+                    if (isNaN(Sync.lastSynced.getTime())) {
+                        return i18nc("@info", "Signed in. Not synced yet.");
+                    }
+                    return i18nc("@info %1 is a date and time", "Signed in. Last synced %1.", Qt.formatDateTime(Sync.lastSynced, Locale.ShortFormat));
+                }
+            }
+
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                type: Kirigami.MessageType.Error
+                text: Sync.lastError
+                visible: text.length > 0
+            }
+
+            Flow {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+                enabled: !Sync.busy
+
+                QQC2.Button {
+                    icon.name: "im-user-online"
+                    text: i18nc("@action:button", "Sign In…")
+                    visible: !Sync.signedIn
+                    enabled: Sync.serverUrl.length > 0
+                    QQC2.ToolTip.text: i18nc("@info:tooltip", "Opens your browser. Applications already on this computer are uploaded and merged with the server's.")
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                    onClicked: Sync.signIn()
+                }
+                QQC2.Button {
+                    icon.name: "view-refresh"
+                    text: i18nc("@action:button", "Sync Now")
+                    visible: Sync.signedIn
+                    onClicked: Sync.syncNow()
+                }
+                QQC2.Button {
+                    icon.name: "system-log-out"
+                    text: i18nc("@action:button", "Sign Out")
+                    visible: Sync.signedIn
+                    QQC2.ToolTip.text: i18nc("@info:tooltip", "Stops syncing. Your applications stay on this computer.")
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                    onClicked: Sync.signOut()
+                }
+            }
+        }
+
+        Kirigami.ListSectionHeader {
+            Layout.fillWidth: true
             text: i18nc("@title:group", "Applications")
         }
 

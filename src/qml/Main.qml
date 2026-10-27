@@ -49,6 +49,34 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    // Sync with the Kareer server (Preferences > Sync): at startup and every
+    // five minutes while signed in, and a few seconds after a local change.
+    // Anything pulled from elsewhere (the other machine, Grok) reloads the list.
+    Connections {
+        target: Sync
+        function onSynced(changed: int): void {
+            if (changed > 0) {
+                jobsModel.refresh();
+            }
+        }
+    }
+    Connections {
+        target: jobsModel
+        function onModelReset(): void {
+            Sync.scheduleSync();
+        }
+        function onDataChanged(): void {
+            Sync.scheduleSync();
+        }
+    }
+    Timer {
+        interval: 5 * 60 * 1000
+        running: Sync.signedIn && !DatabaseLocation.setupPending
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: Sync.syncNow()
+    }
+
     function announceGhosted(count: int): void {
         root.showPassiveNotification(i18ncp("@info", "Marked %1 application with no response as Ghosted", "Marked %1 applications with no response as Ghosted", count));
     }

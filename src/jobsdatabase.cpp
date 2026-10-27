@@ -10,10 +10,13 @@
 #include <QAtomicInteger>
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonObject>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
+#include <QUuid>
 #include <QVariant>
 
 using namespace Qt::Literals::StringLiterals;
@@ -37,6 +40,13 @@ QVariant salaryToVariant(int value)
 int salaryFromVariant(const QVariant &value)
 {
     return value.isNull() ? -1 : value.toInt();
+}
+
+/// Modified-at stamps decide which write wins a sync, so they keep
+/// milliseconds; everything else in the file is to the second.
+QString syncStamp()
+{
+    return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
 }
 }
 
@@ -229,6 +239,42 @@ bool JobsDatabase::migrate()
         return false;
     }
 
+    // Sync bookkeeping, added in 0.2. Existing rows get an id and count as
+    // modified when they were last updated, and start dirty so the first
+    // sync uploads them.
+    QSet<QString> jobColumns;
+    if (!query.exec(u"PRAGMA table_info(jobs)"_s)) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    while (query.next()) {
+        jobColumns.insert(query.value(1).toString());
+    }
+    for (const auto &[column, type] : {
+             std::pair{u"uuid"_s, u"TEXT"_s},
+             std::pair{u"fields_modified_at"_s, u"TEXT"_s},
+             std::pair{u"history_modified_at"_s, u"TEXT"_s},
+             std::pair{u"sync_dirty"_s, u"INTEGER NOT NULL DEFAULT 1"_s},
+         }) {
+        if (!jobColumns.contains(column) && !query.exec(u"ALTER TABLE jobs ADD COLUMN %1 %2"_s.arg(column, type))) {
+            m_lastError = query.lastError().text();
+            return false;
+        }
+    }
+    for (const QString &statement : {
+             u"UPDATE jobs SET uuid = lower(hex(randomblob(16))) WHERE uuid IS NULL"_s,
+             u"UPDATE jobs SET fields_modified_at = updated_at WHERE fields_modified_at IS NULL"_s,
+             u"UPDATE jobs SET history_modified_at = updated_at WHERE history_modified_at IS NULL"_s,
+             u"CREATE UNIQUE INDEX IF NOT EXISTS jobs_uuid ON jobs(uuid)"_s,
+             u"CREATE TABLE IF NOT EXISTS sync_tombstones (uuid TEXT PRIMARY KEY)"_s,
+             u"CREATE TABLE IF NOT EXISTS sync_state (key TEXT PRIMARY KEY, value TEXT)"_s,
+         }) {
+        if (!query.exec(statement)) {
+            m_lastError = query.lastError().text();
+            return false;
+        }
+    }
+
     // Rows written before stages were canonicalized on write (e.g.
     // "rejected" via the CLI) would otherwise show up as separate Sankey
     // nodes with default column/color. lower() is ASCII-only, which is fine:
@@ -337,10 +383,10 @@ bool JobsDatabase::addJob(Job &job)
         uR"(
         INSERT INTO jobs (company, title, location, remote_type, source, url, date_applied,
                            salary_min, salary_max, salary_expectation, currency, notes, contact,
-                           stage, created_at, updated_at)
+                           stage, created_at, updated_at, uuid, fields_modified_at, history_modified_at)
         VALUES (:company, :title, :location, :remote_type, :source, :url, :date_applied,
                 :salary_min, :salary_max, :salary_expectation, :currency, :notes, :contact,
-                :stage, :created_at, :updated_at)
+                :stage, :created_at, :updated_at, :uuid, :modified_at, :modified_at)
     )"_s);
     query.bindValue(u":company"_s, job.company);
     query.bindValue(u":title"_s, job.title);
@@ -358,6 +404,8 @@ bool JobsDatabase::addJob(Job &job)
     query.bindValue(u":stage"_s, job.stage);
     query.bindValue(u":created_at"_s, job.createdAt.toString(Qt::ISODate));
     query.bindValue(u":updated_at"_s, job.updatedAt.toString(Qt::ISODate));
+    query.bindValue(u":uuid"_s, QUuid::createUuid().toString(QUuid::WithoutBraces));
+    query.bindValue(u":modified_at"_s, syncStamp());
 
     if (!query.exec()) {
         m_lastError = query.lastError().text();
@@ -389,7 +437,7 @@ bool JobsDatabase::updateJob(const Job &job)
                         date_applied = :date_applied, salary_min = :salary_min,
                         salary_max = :salary_max, salary_expectation = :salary_expectation,
                         currency = :currency, notes = :notes, contact = :contact,
-                        updated_at = :updated_at
+                        updated_at = :updated_at, fields_modified_at = :modified_at, sync_dirty = 1
         WHERE id = :id
     )"_s);
     query.bindValue(u":company"_s, job.company);
@@ -406,6 +454,7 @@ bool JobsDatabase::updateJob(const Job &job)
     query.bindValue(u":notes"_s, job.notes);
     query.bindValue(u":contact"_s, job.contact);
     query.bindValue(u":updated_at"_s, QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+    query.bindValue(u":modified_at"_s, syncStamp());
     query.bindValue(u":id"_s, job.id);
 
     if (!query.exec()) {
@@ -440,9 +489,10 @@ bool JobsDatabase::setStage(int id, const QString &newStage)
     const QDateTime now = QDateTime::currentDateTimeUtc();
 
     QSqlQuery query(db);
-    query.prepare(u"UPDATE jobs SET stage = :stage, updated_at = :updated_at WHERE id = :id"_s);
+    query.prepare(u"UPDATE jobs SET stage = :stage, updated_at = :updated_at, history_modified_at = :modified_at, sync_dirty = 1 WHERE id = :id"_s);
     query.bindValue(u":stage"_s, stage);
     query.bindValue(u":updated_at"_s, now.toString(Qt::ISODate));
+    query.bindValue(u":modified_at"_s, syncStamp());
     query.bindValue(u":id"_s, id);
     if (!query.exec()) {
         m_lastError = query.lastError().text();
@@ -466,6 +516,12 @@ bool JobsDatabase::setStage(int id, const QString &newStage)
 bool JobsDatabase::deleteJob(int id)
 {
     QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    query.prepare(u"INSERT OR IGNORE INTO sync_tombstones (uuid) SELECT uuid FROM jobs WHERE id = :id"_s);
+    query.bindValue(u":id"_s, id);
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
     query.prepare(u"DELETE FROM jobs WHERE id = :id"_s);
     query.bindValue(u":id"_s, id);
     if (!query.exec()) {
@@ -539,25 +595,16 @@ bool JobsDatabase::replaceStageHistory(int jobId, QList<StageStep> steps)
         return false;
     };
 
+    if (!writeHistory(jobId, collapsed)) {
+        db.rollback();
+        return false;
+    }
+    // date_applied is one of the fields, so both halves count as modified.
     QSqlQuery query(db);
-    query.prepare(u"DELETE FROM stage_history WHERE job_id = :id"_s);
-    query.bindValue(u":id"_s, jobId);
-    if (!query.exec()) {
-        return fail(query);
-    }
-    QString previous;
-    for (const StageStep &step : std::as_const(collapsed)) {
-        query.prepare(u"INSERT INTO stage_history (job_id, from_stage, to_stage, changed_at) VALUES (:job_id, :from_stage, :to_stage, :changed_at)"_s);
-        query.bindValue(u":job_id"_s, jobId);
-        query.bindValue(u":from_stage"_s, previous.isEmpty() ? QVariant() : QVariant(previous));
-        query.bindValue(u":to_stage"_s, step.stage);
-        query.bindValue(u":changed_at"_s, step.at.toUTC().toString(Qt::ISODate));
-        if (!query.exec()) {
-            return fail(query);
-        }
-        previous = step.stage;
-    }
-    query.prepare(u"UPDATE jobs SET stage = :stage, date_applied = :date_applied, updated_at = :updated_at WHERE id = :id"_s);
+    query.prepare(
+        u"UPDATE jobs SET stage = :stage, date_applied = :date_applied, updated_at = :updated_at, "
+        u"fields_modified_at = :modified_at, history_modified_at = :modified_at, sync_dirty = 1 WHERE id = :id"_s);
+    query.bindValue(u":modified_at"_s, syncStamp());
     query.bindValue(u":stage"_s, collapsed.last().stage);
     query.bindValue(u":date_applied"_s, collapsed.first().at.toLocalTime().date().toString(Qt::ISODate));
     query.bindValue(u":updated_at"_s, QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
@@ -569,6 +616,31 @@ bool JobsDatabase::replaceStageHistory(int jobId, QList<StageStep> steps)
         m_lastError = db.lastError().text();
         db.rollback();
         return false;
+    }
+    return true;
+}
+
+bool JobsDatabase::writeHistory(int jobId, const QList<StageStep> &steps)
+{
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    query.prepare(u"DELETE FROM stage_history WHERE job_id = :id"_s);
+    query.bindValue(u":id"_s, jobId);
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    QString previous;
+    for (const StageStep &step : steps) {
+        query.prepare(u"INSERT INTO stage_history (job_id, from_stage, to_stage, changed_at) VALUES (:job_id, :from_stage, :to_stage, :changed_at)"_s);
+        query.bindValue(u":job_id"_s, jobId);
+        query.bindValue(u":from_stage"_s, previous.isEmpty() ? QVariant() : QVariant(previous));
+        query.bindValue(u":to_stage"_s, step.stage);
+        query.bindValue(u":changed_at"_s, step.at.toUTC().toString(Qt::ISODate));
+        if (!query.exec()) {
+            m_lastError = query.lastError().text();
+            return false;
+        }
+        previous = step.stage;
     }
     return true;
 }
@@ -641,4 +713,295 @@ QList<StageTransition> JobsDatabase::stageTransitions() const
         transitions.append(t);
     }
     return transitions;
+}
+
+namespace
+{
+/// The job columns that travel as a sync record's "fields", by wire name.
+/// Stage is not one of them: it is derived from the history.
+const QStringList &syncFieldColumns()
+{
+    static const QStringList columns{
+        u"company"_s,
+        u"title"_s,
+        u"location"_s,
+        u"remote_type"_s,
+        u"source"_s,
+        u"url"_s,
+        u"date_applied"_s,
+        u"salary_min"_s,
+        u"salary_max"_s,
+        u"salary_expectation"_s,
+        u"currency"_s,
+        u"notes"_s,
+        u"contact"_s,
+        u"created_at"_s,
+    };
+    return columns;
+}
+
+bool isIntegerColumn(const QString &column)
+{
+    return column.startsWith(u"salary_"_s);
+}
+
+QDateTime parseStamp(const QJsonValue &value)
+{
+    return QDateTime::fromString(value.toString(), Qt::ISODateWithMs);
+}
+}
+
+QJsonArray JobsDatabase::pendingSyncRecords() const
+{
+    QJsonArray records;
+    if (!isOpen()) {
+        return records;
+    }
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    QSqlQuery query(db);
+    query.prepare(u"SELECT * FROM jobs WHERE sync_dirty = 1"_s);
+    if (!query.exec()) {
+        return records;
+    }
+    while (query.next()) {
+        QJsonObject fields;
+        for (const QString &column : syncFieldColumns()) {
+            const QVariant value = query.value(column);
+            fields[column] = value.isNull() ? QJsonValue() : isIntegerColumn(column) ? QJsonValue(value.toInt()) : QJsonValue(value.toString());
+        }
+        QJsonArray history;
+        for (const StageStep &step : stageHistory(query.value(u"id"_s).toInt())) {
+            history.append(QJsonObject{{u"stage"_s, step.stage}, {u"at"_s, step.at.toUTC().toString(Qt::ISODate)}});
+        }
+        records.append(QJsonObject{
+            {u"uuid"_s, query.value(u"uuid"_s).toString()},
+            {u"fields_modified_at"_s, query.value(u"fields_modified_at"_s).toString()},
+            {u"history_modified_at"_s, query.value(u"history_modified_at"_s).toString()},
+            {u"fields"_s, fields},
+            {u"history"_s, history},
+        });
+    }
+    query.prepare(u"SELECT uuid FROM sync_tombstones"_s);
+    if (query.exec()) {
+        while (query.next()) {
+            records.append(QJsonObject{{u"uuid"_s, query.value(0).toString()}, {u"deleted"_s, true}});
+        }
+    }
+    return records;
+}
+
+bool JobsDatabase::hasPendingSyncRecords() const
+{
+    if (!isOpen()) {
+        return false;
+    }
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    return query.exec(u"SELECT EXISTS(SELECT 1 FROM jobs WHERE sync_dirty = 1) OR EXISTS(SELECT 1 FROM sync_tombstones)"_s) && query.next()
+        && query.value(0).toBool();
+}
+
+qint64 JobsDatabase::syncCursor() const
+{
+    if (!isOpen()) {
+        return 0;
+    }
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    if (!query.exec(u"SELECT value FROM sync_state WHERE key = 'cursor'"_s) || !query.next()) {
+        return 0;
+    }
+    return query.value(0).toLongLong();
+}
+
+int JobsDatabase::applySyncResult(const QJsonArray &pushed, const QJsonArray &pulled, qint64 cursor)
+{
+    if (!isOpen()) {
+        return -1;
+    }
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    if (!db.transaction()) {
+        m_lastError = db.lastError().text();
+        return -1;
+    }
+    const auto fail = [&](const QSqlQuery &query) {
+        m_lastError = query.lastError().text();
+        db.rollback();
+        return -1;
+    };
+
+    QSqlQuery query(db);
+    for (const QJsonValue &value : pushed) {
+        const QJsonObject record = value.toObject();
+        if (record[u"deleted"_s].toBool()) {
+            query.prepare(u"DELETE FROM sync_tombstones WHERE uuid = :uuid"_s);
+        } else {
+            // A job edited again while the request was in flight stays dirty.
+            query.prepare(
+                u"UPDATE jobs SET sync_dirty = 0 WHERE uuid = :uuid "
+                u"AND fields_modified_at = :fields_at AND history_modified_at = :history_at"_s);
+            query.bindValue(u":fields_at"_s, record[u"fields_modified_at"_s].toString());
+            query.bindValue(u":history_at"_s, record[u"history_modified_at"_s].toString());
+        }
+        query.bindValue(u":uuid"_s, record[u"uuid"_s].toString());
+        if (!query.exec()) {
+            return fail(query);
+        }
+    }
+
+    int changedJobs = 0;
+    for (const QJsonValue &value : pulled) {
+        bool changed = false;
+        if (!mergeSyncRecord(value.toObject(), changed)) {
+            db.rollback();
+            return -1;
+        }
+        changedJobs += changed ? 1 : 0;
+    }
+
+    query.prepare(u"INSERT OR REPLACE INTO sync_state (key, value) VALUES ('cursor', :cursor)"_s);
+    query.bindValue(u":cursor"_s, QString::number(cursor));
+    if (!query.exec()) {
+        return fail(query);
+    }
+    if (!db.commit()) {
+        m_lastError = db.lastError().text();
+        db.rollback();
+        return -1;
+    }
+    return changedJobs;
+}
+
+bool JobsDatabase::mergeSyncRecord(const QJsonObject &record, bool &changed)
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    QSqlQuery query(db);
+    const QString uuid = record[u"uuid"_s].toString();
+    if (uuid.isEmpty()) {
+        return true;
+    }
+
+    if (record[u"deleted"_s].toBool()) {
+        query.prepare(u"DELETE FROM jobs WHERE uuid = :uuid"_s);
+        query.bindValue(u":uuid"_s, uuid);
+        if (!query.exec()) {
+            m_lastError = query.lastError().text();
+            return false;
+        }
+        changed = query.numRowsAffected() > 0;
+        query.prepare(u"DELETE FROM sync_tombstones WHERE uuid = :uuid"_s);
+        query.bindValue(u":uuid"_s, uuid);
+        return query.exec();
+    }
+
+    QList<StageStep> history;
+    for (const QJsonValue &step : record[u"history"_s].toArray()) {
+        const QString stage = step[u"stage"_s].toString();
+        const QDateTime at = parseStamp(step[u"at"_s]);
+        if (JobStage::isValid(stage) && at.isValid()) {
+            history.append({JobStage::canonical(stage), at});
+        }
+    }
+    const QJsonObject fields = record[u"fields"_s].toObject();
+    const QString fieldsAt = record[u"fields_modified_at"_s].toString();
+    const QString historyAt = record[u"history_modified_at"_s].toString();
+
+    int id = -1;
+    QDateTime localFieldsAt;
+    QDateTime localHistoryAt;
+    query.prepare(u"SELECT id, fields_modified_at, history_modified_at FROM jobs WHERE uuid = :uuid"_s);
+    query.bindValue(u":uuid"_s, uuid);
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    if (query.next()) {
+        id = query.value(0).toInt();
+        localFieldsAt = parseStamp(query.value(1).toString());
+        localHistoryAt = parseStamp(query.value(2).toString());
+    } else {
+        // Deleted here but not yet pushed: the delete goes up next and wins.
+        query.prepare(u"SELECT 1 FROM sync_tombstones WHERE uuid = :uuid"_s);
+        query.bindValue(u":uuid"_s, uuid);
+        if (query.exec() && query.next()) {
+            return true;
+        }
+        const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        query.prepare(
+            u"INSERT INTO jobs (uuid, company, title, stage, created_at, updated_at, sync_dirty) "
+            u"VALUES (:uuid, '', '', :stage, :now, :now, 0)"_s);
+        query.bindValue(u":uuid"_s, uuid);
+        query.bindValue(u":stage"_s, history.isEmpty() ? u"Applied"_s : history.last().stage);
+        query.bindValue(u":now"_s, now);
+        if (!query.exec()) {
+            m_lastError = query.lastError().text();
+            return false;
+        }
+        id = query.lastInsertId().toInt();
+    }
+
+    const QDateTime remoteFieldsAt = parseStamp(fieldsAt);
+    if (remoteFieldsAt.isValid() && (!localFieldsAt.isValid() || remoteFieldsAt > localFieldsAt)) {
+        QStringList assignments;
+        for (const QString &column : syncFieldColumns()) {
+            assignments.append(u"%1 = :%1"_s.arg(column));
+        }
+        query.prepare(u"UPDATE jobs SET %1, fields_modified_at = :modified_at, updated_at = :now WHERE id = :id"_s.arg(assignments.join(u", "_s)));
+        for (const QString &column : syncFieldColumns()) {
+            const QJsonValue value = fields[column];
+            QVariant bound;
+            if (value.isDouble()) {
+                bound = value.toInt();
+            } else if (value.isString()) {
+                bound = value.toString();
+            } else if (column == u"company"_s || column == u"title"_s || column == u"created_at"_s) {
+                bound = QString(); // NOT NULL columns
+            }
+            query.bindValue(u":"_s + column, bound);
+        }
+        query.bindValue(u":modified_at"_s, fieldsAt);
+        query.bindValue(u":now"_s, QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+        query.bindValue(u":id"_s, id);
+        if (!query.exec()) {
+            m_lastError = query.lastError().text();
+            return false;
+        }
+        changed = true;
+    }
+
+    const QDateTime remoteHistoryAt = parseStamp(historyAt);
+    if (!history.isEmpty() && remoteHistoryAt.isValid() && (!localHistoryAt.isValid() || remoteHistoryAt > localHistoryAt)) {
+        if (!writeHistory(id, history)) {
+            return false;
+        }
+        query.prepare(u"UPDATE jobs SET stage = :stage, history_modified_at = :modified_at WHERE id = :id"_s);
+        query.bindValue(u":stage"_s, history.last().stage);
+        query.bindValue(u":modified_at"_s, historyAt);
+        query.bindValue(u":id"_s, id);
+        if (!query.exec()) {
+            m_lastError = query.lastError().text();
+            return false;
+        }
+        changed = true;
+    }
+    return true;
+}
+
+bool JobsDatabase::resetForSync()
+{
+    if (!isOpen()) {
+        return false;
+    }
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    QSqlQuery query(db);
+    for (const QString &statement : {
+             u"DELETE FROM stage_history"_s,
+             u"DELETE FROM jobs"_s,
+             u"DELETE FROM sync_tombstones"_s,
+             u"DELETE FROM sync_state"_s,
+         }) {
+        if (!query.exec(statement)) {
+            m_lastError = query.lastError().text();
+            return false;
+        }
+    }
+    return true;
 }

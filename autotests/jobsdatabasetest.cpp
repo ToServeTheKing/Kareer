@@ -7,6 +7,8 @@
 #include "jobsdatabase.h"
 #include "job.h"
 
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -242,6 +244,141 @@ private Q_SLOTS:
         QVERIFY(!db.replaceStageHistory(9999, {{QStringLiteral("Applied"), at(8, 1)}}));
         QCOMPARE(db.stageHistory(id).size(), 3);
         QCOMPARE(db.jobById(id)->stage, QStringLiteral("Rejected"));
+    }
+
+    // --- sync ------------------------------------------------------------
+
+    void syncRoundTripCopiesJobsAndHistory()
+    {
+        QTemporaryDir dir;
+        JobsDatabase laptop(dir.path() + QStringLiteral("/laptop.sqlite"));
+        JobsDatabase desktop(dir.path() + QStringLiteral("/desktop.sqlite"));
+
+        Job job;
+        job.company = QStringLiteral("Acme");
+        job.title = QStringLiteral("Engineer");
+        job.salaryMax = 150000;
+        QVERIFY(laptop.addJob(job));
+        QVERIFY(laptop.setStage(job.id, QStringLiteral("Interview")));
+
+        const QJsonArray pushed = laptop.pendingSyncRecords();
+        QCOMPARE(pushed.size(), 1);
+        QVERIFY(laptop.hasPendingSyncRecords());
+        // The server echoes the winning records back; applying them is a no-op.
+        QCOMPARE(laptop.applySyncResult(pushed, pushed, 1), 0);
+        QVERIFY(!laptop.hasPendingSyncRecords());
+        QCOMPARE(laptop.syncCursor(), 1);
+
+        QCOMPARE(desktop.applySyncResult({}, pushed, 1), 1);
+        const QList<Job> jobs = desktop.allJobs();
+        QCOMPARE(jobs.size(), 1);
+        QCOMPARE(jobs.first().company, QStringLiteral("Acme"));
+        QCOMPARE(jobs.first().salaryMax, 150000);
+        QCOMPARE(jobs.first().salaryMin, -1);
+        QCOMPARE(jobs.first().stage, QStringLiteral("Interview"));
+        QCOMPARE(desktop.stageHistory(jobs.first().id).size(), 2);
+        QVERIFY(!desktop.hasPendingSyncRecords());
+    }
+
+    void syncMergesFieldsAndHistorySeparately()
+    {
+        QTemporaryDir dir;
+        JobsDatabase db(dbPathIn(dir));
+        Job job;
+        job.company = QStringLiteral("Acme");
+        job.title = QStringLiteral("Engineer");
+        QVERIFY(db.addJob(job));
+        QJsonObject record = db.pendingSyncRecords().first().toObject();
+        db.applySyncResult(db.pendingSyncRecords(), {}, 1);
+
+        // Edited locally (not yet pushed) while the server recorded a stage
+        // change from Grok and holds an older copy of the fields.
+        job.notes = QStringLiteral("local notes");
+        QVERIFY(db.updateJob(job));
+        QJsonObject remote = record;
+        remote[QStringLiteral("fields_modified_at")] = QStringLiteral("2000-01-01T00:00:00.000Z");
+        remote[QStringLiteral("history_modified_at")] = QStringLiteral("2999-01-01T00:00:00.000Z");
+        QJsonArray history = remote[QStringLiteral("history")].toArray();
+        history.append(QJsonObject{{QStringLiteral("stage"), QStringLiteral("rejected")}, {QStringLiteral("at"), QStringLiteral("2999-01-01T12:00:00.000Z")}});
+        remote[QStringLiteral("history")] = history;
+
+        QCOMPARE(db.applySyncResult({}, {remote}, 2), 1);
+        const auto merged = db.jobById(job.id);
+        QCOMPARE(merged->notes, QStringLiteral("local notes"));
+        QCOMPARE(merged->stage, QStringLiteral("Rejected"));
+        QVERIFY(db.hasPendingSyncRecords()); // the notes still have to go up
+    }
+
+    void syncDeletesTravelBothWays()
+    {
+        QTemporaryDir dir;
+        JobsDatabase db(dbPathIn(dir));
+        Job a;
+        a.company = QStringLiteral("A");
+        a.title = QStringLiteral("T");
+        Job b = a;
+        QVERIFY(db.addJob(a));
+        QVERIFY(db.addJob(b));
+        const QJsonArray all = db.pendingSyncRecords();
+        db.applySyncResult(all, {}, 1);
+
+        QVERIFY(db.deleteJob(a.id));
+        const QJsonArray pending = db.pendingSyncRecords();
+        QCOMPARE(pending.size(), 1);
+        QVERIFY(pending.first()[QStringLiteral("deleted")].toBool());
+        // A stale copy of the deleted job arriving before the delete is pushed
+        // must not resurrect it.
+        QCOMPARE(db.applySyncResult({}, {all.at(0)}, 1), 0);
+        QVERIFY(!db.jobById(a.id));
+        db.applySyncResult(pending, {}, 2);
+        QVERIFY(!db.hasPendingSyncRecords());
+
+        const QString bUuid = all.at(1)[QStringLiteral("uuid")].toString();
+        QCOMPARE(db.applySyncResult({}, {QJsonObject{{QStringLiteral("uuid"), bUuid}, {QStringLiteral("deleted"), true}}}, 3), 1);
+        QVERIFY(db.allJobs().isEmpty());
+    }
+
+    void migratesDatabasesFromBeforeSync()
+    {
+        QTemporaryDir dir;
+        {
+            QSqlDatabase raw = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), QStringLiteral("legacy"));
+            raw.setDatabaseName(dbPathIn(dir));
+            QVERIFY(raw.open());
+            QSqlQuery q(raw);
+            QVERIFY(q.exec(QStringLiteral(
+                "CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, company TEXT NOT NULL, title TEXT NOT NULL, location TEXT, "
+                "remote_type TEXT, source TEXT, url TEXT, date_applied TEXT, salary_min INTEGER, salary_max INTEGER, salary_expectation INTEGER, "
+                "currency TEXT, notes TEXT, contact TEXT, stage TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")));
+            QVERIFY(
+                q.exec(QStringLiteral("INSERT INTO jobs (company, title, stage, created_at, updated_at) VALUES "
+                                      "('Old', 'Job', 'Applied', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'), "
+                                      "('Older', 'Job', 'Applied', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z')")));
+            raw.close();
+        }
+        QSqlDatabase::removeDatabase(QStringLiteral("legacy"));
+
+        JobsDatabase db(dbPathIn(dir));
+        QVERIFY2(db.isOpen(), qPrintable(db.lastError()));
+        const QJsonArray pending = db.pendingSyncRecords();
+        QCOMPARE(pending.size(), 2);
+        QVERIFY(pending.at(0)[QStringLiteral("uuid")].toString() != pending.at(1)[QStringLiteral("uuid")].toString());
+        QCOMPARE(pending.at(0)[QStringLiteral("fields_modified_at")].toString(), QStringLiteral("2026-01-02T00:00:00Z"));
+    }
+
+    void resetForSyncLeavesNoTombstones()
+    {
+        QTemporaryDir dir;
+        JobsDatabase db(dbPathIn(dir));
+        Job job;
+        job.company = QStringLiteral("A");
+        job.title = QStringLiteral("T");
+        QVERIFY(db.addJob(job));
+        db.applySyncResult({}, {}, 5);
+        QVERIFY(db.resetForSync());
+        QVERIFY(db.allJobs().isEmpty());
+        QVERIFY(!db.hasPendingSyncRecords());
+        QCOMPARE(db.syncCursor(), 0);
     }
 
 private:

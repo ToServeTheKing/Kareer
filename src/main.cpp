@@ -110,6 +110,7 @@ int main(int argc, char *argv[])
 
     if (argc >= 2 && Cli::isSubcommand(QString::fromLocal8Bit(argv[1]))) {
         QCoreApplication app(argc, argv);
+        KLocalizedString::setApplicationDomain(QByteArrayLiteral("kareer"));
         DatabaseLocation::loadConfiguredPath();
         if (const int ghosted = AutoGhost::runNow(); ghosted > 0) {
             // stderr, so --json output on stdout stays machine-readable.
