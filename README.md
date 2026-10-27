@@ -27,8 +27,8 @@ applications without ever opening a window.
   off, under Preferences). The move is recorded in its history like any
   other, and the CLI notes it on stderr so `--json` output stays clean.
 - Optional sync between computers through a server you run yourself
-  (`server/`, a Docker image), which also lets an AI assistant such as Grok move
-  applications between stages over MCP
+  (`server/`, a Docker image), which also lets an AI assistant such as Grok log
+  new applications and move them between stages over MCP
 - A full CLI (`kareer add|list|show|update|stage|history|delete|stats|stages|sync`)
   for scripting
 

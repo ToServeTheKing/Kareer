@@ -4,6 +4,7 @@
 
 import base64
 import hashlib
+import json
 import secrets
 import time
 from urllib.parse import parse_qs, urlparse
@@ -203,3 +204,50 @@ def test_registrations_are_limited_per_address(tmp_path):
     with TestClient(app, base_url=URL) as c:
         assert [register(c, **{"CF-Connecting-IP": "203.0.113.1"}).status_code for _ in range(4)] == [201] * 3 + [429]
         assert register(c, **{"CF-Connecting-IP": "203.0.113.2"}).status_code == 201
+
+
+def call_tool(c, token, name, arguments):
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json, text/event-stream",
+               "MCP-Protocol-Version": "2025-06-18"}
+    reply = c.post("/mcp", headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                                  "params": {"name": name, "arguments": arguments}})
+    assert reply.status_code == 200, reply.text
+    data = next(line[5:] for line in reply.text.splitlines() if line.startswith("data:"))
+    return json.loads(data)["result"]
+
+
+def test_add_application_reaches_sync_and_refuses_duplicates(client):
+    token = client.login_as("austin")
+    added = call_tool(client, token, "add_application",
+                      {"company": "Caterpillar", "title": "Software Engineer", "date_applied": "2026-10-25",
+                       "stage": "screening", "remote_type": "hybrid", "notes": "via referral"})
+    assert not added.get("isError"), added
+    pulled = client.post("/api/sync", json={"since": 0, "jobs": []},
+                         headers={"Authorization": f"Bearer {token}"}).json()["jobs"]
+    assert len(pulled) == 1
+    record = pulled[0]
+    assert record["fields"]["company"] == "Caterpillar"
+    assert record["fields"]["remote_type"] == "Hybrid"
+    assert record["fields"]["date_applied"] == "2026-10-25"
+    assert record["fields"]["created_at"].endswith("Z")
+    assert [s["stage"] for s in record["history"]] == ["Applied", "Screening"]
+    assert record["history"][0]["at"] == "2026-10-25T12:00:00.000Z"
+
+    again = call_tool(client, token, "add_application", {"company": "caterpillar", "title": "software engineer"})
+    assert again.get("isError") and "Already logged" in again["content"][0]["text"]
+    separate = call_tool(client, token, "add_application",
+                         {"company": "Caterpillar", "title": "Software Engineer", "allow_duplicate": True})
+    assert not separate.get("isError")
+    assert len(client.store.live_jobs()) == 2
+
+
+def test_tool_errors_reach_the_assistant(client):
+    token = client.login_as("austin")
+    for name, arguments, expected in [
+        ("set_stage", {"id": "nope", "stage": "Interview"}, "No application with id nope"),
+        ("get_application", {"id": "nope"}, "No application with id nope"),
+        ("add_application", {"company": "Acme", "title": "Dev", "stage": "Hired"}, "Unknown stage 'Hired'"),
+        ("add_application", {"company": "Acme", "title": "Dev", "date_applied": "Oct 5"}, "Dates are YYYY-MM-DD"),
+    ]:
+        result = call_tool(client, token, name, arguments)
+        assert result.get("isError") and expected in result["content"][0]["text"], (name, result)

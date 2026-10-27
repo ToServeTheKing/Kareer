@@ -7,7 +7,7 @@ Authentik user can sign in.
 
 | Path | What |
 |---|---|
-| `/mcp` | MCP (streamable HTTP). Tools: `list_applications`, `get_application`, `set_stage` |
+| `/mcp` | MCP (streamable HTTP). Tools: `list_applications`, `get_application`, `add_application`, `set_stage` |
 | `/api/sync` | `POST {since, jobs}` → `{cursor, jobs}`, bearer token. Used by the desktop app |
 | `/authorize`, `/token`, `/register`, `/revoke`, `/.well-known/…` | OAuth 2.1 with dynamic client registration and PKCE |
 | `/oauth/authentik/callback` | Where Authentik sends the browser back after login |
@@ -45,7 +45,7 @@ in. From the command line: `kareer sync --server https://<your host> --sign-in`.
 ## Connecting an assistant
 
 Add a custom MCP connector with the URL `https://<your host>/mcp`. It opens a
-browser window; sign in to Authentik, and the three tools show up.
+browser window; sign in to Authentik, and the four tools show up.
 
 If the server is behind Cloudflare with Bot Fight Mode on, the assistant's
 requests get challenged and the connector never reaches the sign-in. On the
