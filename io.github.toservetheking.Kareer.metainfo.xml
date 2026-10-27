@@ -65,6 +65,15 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.7" date="2026-10-26">
+      <description>
+        <ul>
+          <li>Sync your applications between computers through a Kareer server you run yourself. Each computer keeps a full copy and works offline. Set it up under Preferences, or with kareer sync</li>
+          <li>The server also lets an AI assistant such as Grok list your applications and move them between stages</li>
+          <li>The server is published as a Docker image, ghcr.io/toservetheking/kareer-server</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.6" date="2026-09-11">
       <description>
         <p>Ships everything listed for 0.1.5, which was never published because its build failed.</p>
