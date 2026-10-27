@@ -65,6 +65,14 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.1.8" date="2026-10-27">
+      <description>
+        <ul>
+          <li>Smoother edges on the pipeline diagram</li>
+          <li>An AI assistant connected to your Kareer server can now log new applications, not just list and move them</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.7" date="2026-10-26">
       <description>
         <ul>
