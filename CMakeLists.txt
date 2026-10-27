@@ -40,6 +40,7 @@ find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS
     # SettingsPage.qml); configure-time guard only, nothing links against it.
     QuickDialogs2
     QuickControls2
+    Network
     Sql
     Test
 )

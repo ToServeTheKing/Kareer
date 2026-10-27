@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: 2026 ToServeTheKing <austin@thebennett.net>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Run your own Kareer server. Put AUTHENTIK_CLIENT_ID and AUTHENTIK_CLIENT_SECRET
+# in a .env beside this file, fill in the values below, then:
+#
+#     docker compose up -d
+#
+# To update to the newest release: docker compose pull && docker compose up -d
+# Serve it over HTTPS from a reverse proxy pointed at port 8000.
+name: kareer
+services:
+  kareer:
+    image: ghcr.io/toservetheking/kareer-server:latest
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      KAREER_PUBLIC_URL: https://kareer.example.com
+      KAREER_ALLOWED_USER: your-authentik-username
+      AUTHENTIK_URL: https://sso.example.com
+      # Behind Cloudflare, uncomment so the registration limit sees real addresses.
+      # KAREER_CLIENT_IP_HEADER: CF-Connecting-IP
+    ports:
+      - "8000:8000"
+    volumes:
+      - kareer-data:/data
+
+volumes:
+  kareer-data:

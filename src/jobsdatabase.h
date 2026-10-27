@@ -8,10 +8,12 @@
 
 #include "job.h"
 
+#include <QJsonArray>
 #include <QList>
 #include <QString>
 #include <optional>
 
+class QJsonObject;
 class QSqlDatabase;
 
 /**
@@ -106,11 +108,38 @@ public:
 
     QList<StageTransition> stageTransitions() const;
 
+    // --- Sync (see SyncClient) ---------------------------------------------
+    //
+    // Every write above marks its job dirty and stamps the half it touched
+    // (fields, or stage history) with a modified-at time; deletes leave a
+    // tombstone. A sync pushes pendingSyncRecords(), and the server answers
+    // with every record changed since syncCursor(), merged last-writer-wins
+    // per half.
+
+    /// Dirty jobs and unsent deletes, in the server's wire format.
+    QJsonArray pendingSyncRecords() const;
+    bool hasPendingSyncRecords() const;
+
+    /// The server's change counter as of the last successful sync.
+    qint64 syncCursor() const;
+
+    /// Records a sync round trip: the `pushed` records that have not changed
+    /// since are no longer dirty, the `pulled` ones are merged in, and the
+    /// cursor moves on. Returns how many local jobs the merge changed, or -1
+    /// on a database error (nothing is changed then).
+    int applySyncResult(const QJsonArray &pushed, const QJsonArray &pulled, qint64 cursor);
+
+    /// Deletes every job without leaving tombstones and resets the cursor,
+    /// so the next sync replaces this database with the server's copy.
+    bool resetForSync();
+
 private:
     void init(const QString &path);
     void close();
     bool migrate();
     Job jobFromQuery(class QSqlQuery &query) const;
+    bool mergeSyncRecord(const QJsonObject &record, bool &changed);
+    bool writeHistory(int jobId, const QList<StageStep> &steps);
 
     QString m_connectionName;
     QString m_path;

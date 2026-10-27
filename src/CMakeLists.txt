@@ -39,6 +39,8 @@ qt_add_qml_module(kareer
         databaselocation.h
         autoghost.cpp
         autoghost.h
+        syncclient.cpp
+        syncclient.h
 )
 
 # The app icon, embedded so the window and About page show it even when
@@ -58,6 +60,7 @@ target_link_libraries(kareer PRIVATE
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
+    Qt6::Network
     Qt6::Sql
     KF6::ConfigCore
     KF6::I18n

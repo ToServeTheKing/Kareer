@@ -10,6 +10,7 @@
 #include "jobsdatabase.h"
 #include "jobstage.h"
 #include "statsmodel.h"
+#include "syncclient.h"
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -18,6 +19,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
 #include <QSet>
 #include <QTextStream>
 
@@ -633,14 +635,101 @@ int runStages(const QString &program, const QStringList &args)
     return 0;
 }
 
+int runSync(const QString &program, const QStringList &args)
+{
+    QCommandLineParser parser;
+    parser.setApplicationDescription(u"Sync with the Kareer server (every other command also syncs once signed in)"_s);
+    parser.addHelpOption();
+    addDbOption(parser);
+    parser.addOption({u"sign-in"_s, u"Sign in through the browser"_s});
+    parser.addOption({u"sign-out"_s, u"Forget this machine's sign-in"_s});
+    parser.addOption({u"server"_s, u"Use this server from now on (required the first time)"_s, u"url"_s});
+    parser.addOption({u"replace-local"_s, u"Delete every local application and download the server's copy"_s});
+    parser.addOption({u"status"_s, u"Show the server, sign-in state and last sync"_s});
+    parser.process(QStringList{program + u" sync"_s} + args);
+
+    QTextStream out(stdout);
+    QTextStream err(stderr);
+    SyncClient sync;
+    if (parser.isSet(u"server"_s)) {
+        sync.setServerUrl(parser.value(u"server"_s));
+    }
+    if (parser.isSet(u"sign-out"_s)) {
+        sync.signOut();
+        out << u"Signed out of "_s << sync.serverUrl() << Qt::endl;
+        return 0;
+    }
+    if (parser.isSet(u"status"_s)) {
+        JobsDatabase db;
+        out << u"Server:     "_s << (sync.serverUrl().isEmpty() ? u"(none)"_s : sync.serverUrl()) << Qt::endl
+            << u"Signed in:  "_s << (sync.signedIn() ? u"yes"_s : u"no"_s) << Qt::endl
+            << u"Last sync:  "_s << (sync.lastSynced().isValid() ? sync.lastSynced().toLocalTime().toString(Qt::ISODate) : u"never"_s) << Qt::endl
+            << u"Unsynced:   "_s << db.pendingSyncRecords().size() << u" change(s)"_s << Qt::endl;
+        return 0;
+    }
+    if (sync.serverUrl().isEmpty()) {
+        err << u"No server set. Point Kareer at yours first: "_s << program << u" sync --server https://<your server> --sign-in"_s << Qt::endl;
+        return 1;
+    }
+    if (parser.isSet(u"sign-in"_s) || !sync.signedIn()) {
+        const bool ok = sync.runBlocking(
+            [&] {
+                sync.signIn([&](const QUrl &url) {
+                    err << u"Opening your browser to sign in. If it doesn't open, visit:\n  "_s << url.toString() << Qt::endl;
+                    QProcess::startDetached(u"xdg-open"_s, {url.toString()});
+                });
+            },
+            5 * 60 * 1000);
+        if (!ok) {
+            err << u"Sign-in failed: "_s << sync.lastError() << Qt::endl;
+            return 1;
+        }
+        out << u"Signed in to "_s << sync.serverUrl() << Qt::endl;
+    }
+    if (parser.isSet(u"replace-local"_s)) {
+        JobsDatabase db;
+        if (!db.resetForSync()) {
+            err << u"Error: "_s << db.lastError() << Qt::endl;
+            return 1;
+        }
+    }
+    int changed = 0;
+    QObject::connect(&sync, &SyncClient::synced, [&](int count) {
+        changed = count;
+    });
+    if (!sync.runBlocking(
+            [&] {
+                sync.syncNow();
+            },
+            60 * 1000)) {
+        err << u"Sync failed: "_s << sync.lastError() << Qt::endl;
+        return 1;
+    }
+    out << u"Synced with "_s << sync.serverUrl() << u" ("_s << changed << u" application(s) updated here)"_s << Qt::endl;
+    return 0;
+}
+
+/// Pull before a command and push after it, when signed in. A sync that
+/// fails only warns: the command still runs against the local copy.
+void syncQuietly(SyncClient &sync)
+{
+    if (!sync.runBlocking(
+            [&] {
+                sync.syncNow();
+            },
+            15 * 1000)) {
+        QTextStream(stderr) << u"kareer: sync failed, using the local copy: "_s << sync.lastError() << Qt::endl;
+    }
+}
+
 int runHelp()
 {
     QTextStream out(stdout);
     out << u"Usage: kareer <command> [options]\n\n"_s << u"Commands:\n"_s << u"  add      Add a new job application\n"_s
         << u"  list     List job applications\n"_s << u"  show     Show one job application\n"_s << u"  update   Update fields on an existing application\n"_s
         << u"  stage    Move an application to a new stage\n"_s << u"  delete   Delete an application\n"_s << u"  stats    Summary statistics\n"_s
-        << u"  stages   List the canonical pipeline stages\n"_s << u"  history  Show or replace an application's stage history\n\n"_s
-        << u"Run 'kareer <command> --help' for the options of a specific command.\n"_s
+        << u"  stages   List the canonical pipeline stages\n"_s << u"  history  Show or replace an application's stage history\n"_s
+        << u"  sync     Sign in to the Kareer server and sync\n\n"_s << u"Run 'kareer <command> --help' for the options of a specific command.\n"_s
         << u"Running kareer with no command (or an unrecognized one) starts the GUI.\n\n"_s << u"Global options:\n"_s
         << u"  --db <path>  Use this database file (created if missing) instead of the configured one\n"_s;
     return 0;
@@ -660,6 +749,7 @@ bool Cli::isSubcommand(const QString &arg)
         u"stats"_s,
         u"stages"_s,
         u"history"_s,
+        u"sync"_s,
         u"help"_s,
     };
     return subcommands.contains(arg);
@@ -672,6 +762,23 @@ int Cli::run(QCoreApplication &app)
     const QString subcommand = allArgs.value(1);
     const QStringList rest = allArgs.mid(2);
 
+    if (subcommand == u"sync"_s) {
+        return runSync(program, rest);
+    }
+    SyncClient sync;
+    const bool syncing = sync.signedIn() && subcommand != u"stages"_s && subcommand != u"help"_s && !rest.contains(u"--help"_s);
+    if (syncing) {
+        syncQuietly(sync);
+    }
+    const int status = runCommand(program, subcommand, rest);
+    if (syncing && JobsDatabase().hasPendingSyncRecords()) {
+        syncQuietly(sync);
+    }
+    return status;
+}
+
+int Cli::runCommand(const QString &program, const QString &subcommand, const QStringList &rest)
+{
     if (subcommand == u"add"_s) {
         return runAdd(program, rest);
     }

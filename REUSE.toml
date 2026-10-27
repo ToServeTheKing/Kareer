@@ -17,6 +17,7 @@ path = [
     "README.md",
     "CONTRIBUTING.md",
     "CLAUDE.md",
+    "server/README.md",
     ".gitignore",
 ]
 SPDX-License-Identifier = "CC0-1.0"

@@ -26,7 +26,10 @@ applications without ever opening a window.
   anything still at Applied with no activity for 30 days (adjustable, or
   off, under Preferences). The move is recorded in its history like any
   other, and the CLI notes it on stderr so `--json` output stays clean.
-- A full CLI (`kareer add|list|show|update|stage|history|delete|stats|stages`)
+- Optional sync between computers through a server you run yourself
+  (`server/`, a Docker image), which also lets an AI assistant such as Grok move
+  applications between stages over MCP
+- A full CLI (`kareer add|list|show|update|stage|history|delete|stats|stages|sync`)
   for scripting
 
 ## Command line usage
@@ -65,6 +68,12 @@ kareer delete 1 --yes
 # Summary stats and the canonical stage list
 kareer stats
 kareer stages
+
+# Sync with your Kareer server (signs in through the browser the first time)
+kareer sync --server https://kareer.example.com --sign-in
+kareer sync
+kareer sync --status
+kareer sync --replace-local   # throw away this computer's copy, take the server's
 ```
 
 Run `kareer <command> --help` for the full option list of any
@@ -85,6 +94,27 @@ The database file is picked in this order:
 3. The location chosen in the GUI (stored in `kareerrc`)
 4. `$XDG_DATA_HOME/kareer/kareer.sqlite` (under Flatpak, that's sandboxed to
    the app's own data directory)
+
+### Syncing between computers
+
+Kareer can keep its database in step with a Kareer server that you run
+yourself; there is no hosted one. [`server/README.md`](server/README.md)
+covers setting it up with Docker (`ghcr.io/toservetheking/kareer-server`)
+and Authentik. Then enter its address and sign in under Preferences > Sync,
+or run `kareer sync --server <address> --sign-in`. Sync stays off until a
+server is set. The GUI then syncs at startup, every five minutes
+and a few seconds after each change; every CLI command syncs before it
+runs and, if it changed anything, after. Each computer keeps a full local
+copy and works offline.
+
+Edits to an application's details and to its stage history merge
+separately, latest change wins, so a stage moved on one computer and notes
+typed on another both survive. A delete wins over any edit.
+
+When the second computer already has applications of its own, signing in
+merges them with the server's, which duplicates anything entered on both.
+To start that computer from the server's copy instead, run
+`kareer sync --replace-local` once.
 
 ### Wiring up a resume-builder tool
 
