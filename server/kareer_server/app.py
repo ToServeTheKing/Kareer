@@ -15,16 +15,19 @@ from __future__ import annotations
 import os
 import time as clock
 from collections import deque
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from .oauth import CALLBACK_PATH, AuthentikConfig, KareerOAuthProvider
-from .store import STAGES, Store
+from .store import STAGES, Store, canonical_stage
+
+REMOTE_TYPES = ["Onsite", "Hybrid", "Remote"]
 
 SCOPE = "kareer"
 
@@ -90,7 +93,8 @@ def create_app(store: Store, public_url: str, authentik: AuthentikConfig, regist
         name="Kareer",
         instructions=(
             "Kareer is the user's job application tracker. Use list_applications to find an "
-            "application by company or title, then set_stage to record that it moved. "
+            "application by company or title, then set_stage to record that it moved, or "
+            "add_application to log a new one. "
             f"Stages: {', '.join(STAGES)}. Moves are recorded in the application's stage "
             "history, which the desktop app syncs."
         ),
@@ -125,7 +129,61 @@ def create_app(store: Store, public_url: str, authentik: AuthentikConfig, regist
         """Everything recorded about one application, including its stage history."""
         record = store.job(id)
         if record is None:
-            raise ValueError(f"No application with id {id}")
+            raise ToolError(f"No application with id {id}")
+        return _summary(record) | {"fields": record["fields"], "history": record["history"]}
+
+    @mcp.tool()
+    def add_application(
+        company: str,
+        title: str,
+        date_applied: str | None = None,
+        stage: str = "Applied",
+        location: str | None = None,
+        remote_type: str | None = None,
+        source: str | None = None,
+        url: str | None = None,
+        notes: str | None = None,
+        contact: str | None = None,
+        salary_min: int | None = None,
+        salary_max: int | None = None,
+        currency: str | None = None,
+        allow_duplicate: bool = False,
+    ) -> dict[str, Any]:
+        """Log a new job application. `date_applied` is YYYY-MM-DD (default today).
+        `stage` is where it stands now (default Applied); anything else is recorded as
+        a move on from Applied. `remote_type` is Onsite, Hybrid or Remote. Refuses if an
+        application with the same company and title already exists (check with
+        list_applications, or pass allow_duplicate=true for a genuinely separate one)."""
+        company, title = company.strip(), title.strip()
+        if not company or not title:
+            raise ToolError("company and title are required")
+        if not allow_duplicate:
+            same = [j for j in map(_summary, store.live_jobs())
+                    if (j["company"] or "").lower() == company.lower() and (j["title"] or "").lower() == title.lower()]
+            if same:
+                raise ToolError(f"Already logged as {same[0]['id']} (stage {same[0]['stage']}). "
+                                 "Use set_stage to update it, or allow_duplicate=true for a separate application.")
+        canonical = canonical_stage(stage)
+        if canonical is None:
+            raise ToolError(f"Unknown stage '{stage}'. Valid stages: {', '.join(STAGES)}")
+        if remote_type:
+            remote_type = next((r for r in REMOTE_TYPES if r.lower() == remote_type.strip().lower()), None)
+            if remote_type is None:
+                raise ToolError(f"remote_type is one of {', '.join(REMOTE_TYPES)}")
+        now = datetime.now(UTC)
+        day = _parse_day(date_applied) if date_applied else now.date()
+        # Never in the future, and a second ahead of any later stage so the
+        # two steps can't swap places when a client sorts them.
+        applied_at = min(datetime.combine(day, time(12), UTC), now - timedelta(seconds=1))
+        history = [{"stage": "Applied", "at": _stamp(applied_at)}]
+        if canonical != "Applied":
+            history.append({"stage": canonical, "at": _stamp(now)})
+        fields = {
+            "company": company, "title": title, "date_applied": day.isoformat(), "location": location,
+            "remote_type": remote_type, "source": source, "url": url, "notes": notes, "contact": contact,
+            "salary_min": salary_min, "salary_max": salary_max, "currency": currency,
+        }
+        record = store.add_job(fields, history)
         return _summary(record) | {"fields": record["fields"], "history": record["history"]}
 
     @mcp.tool()
@@ -135,12 +193,13 @@ def create_app(store: Store, public_url: str, authentik: AuthentikConfig, regist
         (YYYY-MM-DD) backdates the move; omit it to record the move as happening now."""
         at = None
         if date:
-            day = _parse_day(date)
-            at = datetime.combine(day, time(12), UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            at = _noon(_parse_day(date))
         try:
             record = store.set_stage(id, stage, at)
         except KeyError:
-            raise ValueError(f"No application with id {id}") from None
+            raise ToolError(f"No application with id {id}") from None
+        except ValueError as error:
+            raise ToolError(str(error)) from None
         return _summary(record) | {"history": record["history"]}
 
     @mcp.custom_route("/health", methods=["GET"])
@@ -171,11 +230,19 @@ def create_app(store: Store, public_url: str, authentik: AuthentikConfig, regist
                              registrations_per_hour, client_ip_header)
 
 
+def _stamp(moment: datetime) -> str:
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
+
+
+def _noon(day: date) -> str:
+    return _stamp(datetime.combine(day, time(12), UTC))
+
+
 def _parse_day(value: str) -> date:
     try:
         return date.fromisoformat(value)
     except ValueError:
-        raise ValueError(f"Dates are YYYY-MM-DD, got '{value}'") from None
+        raise ToolError(f"Dates are YYYY-MM-DD, got '{value}'") from None
 
 
 def main() -> None:

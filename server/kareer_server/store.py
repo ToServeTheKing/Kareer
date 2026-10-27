@@ -19,6 +19,7 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 STAGES = [
     "Applied",
@@ -210,6 +211,27 @@ class Store:
         if row is None or row["deleted"]:
             return None
         return self._to_record(row)
+
+    def add_job(self, fields: dict[str, Any], history: list[dict[str, str]]) -> dict[str, Any]:
+        """Creates an application the way JobsDatabase::addJob does, minus the
+        synthetic Start step, which never travels in sync records."""
+        stamp = now_iso()
+        record = {
+            "uuid": uuid4().hex,
+            "fields_modified_at": stamp,
+            "history_modified_at": stamp,
+            "fields": {"created_at": stamp[:19] + "Z"} | fields,
+            "history": history,
+        }
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                self._merge(record)
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+            return self._to_record(self._row(record["uuid"]))
 
     def set_stage(self, uuid: str, stage: str, at: str | None = None) -> dict[str, Any]:
         """Records a move the way JobsDatabase::setStage does: a no-op if the job
