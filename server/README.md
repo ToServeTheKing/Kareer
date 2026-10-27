@@ -7,7 +7,7 @@ Authentik user can sign in.
 
 | Path | What |
 |---|---|
-| `/mcp` | MCP (streamable HTTP). Tools: `list_applications`, `get_application`, `add_application`, `set_stage` |
+| `/mcp` | MCP (streamable HTTP). Tools: `list_applications`, `get_application`, `add_application`, `set_stage`, `set_history` |
 | `/api/sync` | `POST {since, jobs}` → `{cursor, jobs}`, bearer token. Used by the desktop app |
 | `/authorize`, `/token`, `/register`, `/revoke`, `/.well-known/…` | OAuth 2.1 with dynamic client registration and PKCE |
 | `/oauth/authentik/callback` | Where Authentik sends the browser back after login |

@@ -253,6 +253,26 @@ class Store:
             )
             return self._to_record(self._row(uuid))
 
+    def replace_history(self, uuid: str, steps: list[dict[str, str]]) -> dict[str, Any]:
+        """Rewrites a job's whole history the way JobsDatabase::replaceStageHistory
+        does: normalized, with date_applied set to the first step's date, so both
+        halves count as modified."""
+        history = normalize_history(steps)
+        if not history:
+            raise ValueError("A history needs at least one valid step")
+        with self._lock:
+            row = self._row(uuid)
+            if row is None or row["deleted"]:
+                raise KeyError(uuid)
+            fields = json.loads(row["fields"]) | {"date_applied": history[0]["at"][:10]}
+            stamp = now_iso()
+            self._db.execute(
+                "UPDATE jobs SET fields = ?, history = ?, fields_modified_at = ?, history_modified_at = ?, "
+                "seq = ? WHERE uuid = ?",
+                (json.dumps(fields), json.dumps(history), stamp, stamp, self._next_seq(), uuid),
+            )
+            return self._to_record(self._row(uuid))
+
     # --- small expiring key/value store for OAuth state -----------------------
 
     def put(self, kind: str, key: str, value: dict[str, Any], expires_at: float | None) -> None:
